@@ -110,7 +110,7 @@ from stall_mate.config import (
     load_classification_config,
 )
 from stall_mate.recorder import JSONLRecorder
-from stall_mate.runner import ExperimentRunner
+from stall_mate.runner import ExperimentDisplay, ExperimentRunner, RunStats
 
 model_cfg = load_model_config(ROOT / 'configs' / 'models.yaml')
 templates = load_prompt_templates(ROOT / 'configs' / 'prompt_templates' / 'phase1.yaml')
@@ -126,11 +126,8 @@ client = LLMClient(
     probe_message=model_cfg.probe_message,
 )
 
-total_calls = 0
-total_valid = 0
-total_refused = 0
-total_ambiguous = 0
-start_time = time.time()
+display = ExperimentDisplay()
+global_stats = RunStats(start_time=time.time())
 
 for cfg in experiment_configs:
     output_path = ROOT / 'data' / f'phase1_{cfg.experiment_id}.jsonl'
@@ -141,44 +138,14 @@ for cfg in experiment_configs:
         model_config=model_cfg,
         refusal_keywords=classification_cfg.refusal_keywords,
         extraction_patterns=classification_cfg.to_extraction_patterns(),
+        display=display,
     )
 
-    calls_in_exp = len(cfg.num_stalls) * len(cfg.temperatures) * len(cfg.templates) * cfg.repetitions
-    exp_start = time.time()
-    print(f'[{cfg.experiment_id}] {cfg.description}')
-    print(f'  预计 {calls_in_exp} 次调用...')
+    exp_stats = runner.run_experiment(cfg, templates)
+    global_stats.merge(exp_stats)
 
-    records = runner.run_experiment(cfg, templates)
-
-    exp_elapsed = time.time() - exp_start
-    valid = sum(1 for r in records if r.choice_status.value == 'VALID')
-    refused = sum(1 for r in records if r.choice_status.value == 'REFUSED')
-    ambiguous = sum(1 for r in records if r.choice_status.value == 'AMBIGUOUS')
-    avg_latency = sum(r.latency_ms for r in records) / len(records) if records else 0
-
-    total_calls += len(records)
-    total_valid += valid
-    total_refused += refused
-    total_ambiguous += ambiguous
-
-    print(f'  完成: {len(records)} 次调用, 耗时 {exp_elapsed:.0f}s')
-    print(f'  VALID={valid}, REFUSED={refused}, AMBIGUOUS={ambiguous}, 平均延迟={avg_latency:.0f}ms')
-    print(f'  输出: {output_path}')
-    print()
-
-elapsed = time.time() - start_time
-hours = int(elapsed // 3600)
-minutes = int((elapsed % 3600) // 60)
-seconds = int(elapsed % 60)
-
-print('========================================')
-print('  全量实验完成')
-print('========================================')
-print(f'  总调用: {total_calls} 次')
-print(f'  VALID: {total_valid}, REFUSED: {total_refused}, AMBIGUOUS: {total_ambiguous}')
-print(f'  总耗时: {hours}h {minutes}m {seconds}s')
-print(f'  数据目录: {ROOT / \"data\"}')
-print('========================================')
+global_stats.end_time = time.time()
+display.print_global_summary(global_stats, data_dir=ROOT / 'data')
 "
 
 echo ""
