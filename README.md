@@ -4,8 +4,8 @@
 ## Quick Start / 快速开始
 
 ```bash
-pip install -e .
-python scripts/verify_10calls.py
+uv sync
+uv run python scripts/verify_10calls.py
 ```
 
 ## Project Structure / 项目结构
@@ -17,13 +17,13 @@ stall-mate/
 │   ├── experiments/      # 实验参数 / Experiment parameters
 │   └── prompt_templates/ # 提示词模板 / Prompt templates
 ├── src/stall_mate/       # 核心代码 / Core library
-│   ├── types.py          # 数据类型 / Data types & enums
-│   ├── schema.py         # LLM 响应模式 / LLM response schema
-│   ├── config.py         # 配置加载 / Config loading
-│   ├── prompt.py         # 提示词构建 / Prompt builder
-│   ├── client.py         # LLM 客户端 / LLM client
-│   ├── runner.py         # 实验运行器 / Experiment runner
-│   └── recorder.py       # JSONL 记录器 / JSONL recorder
+│   ├── types/            # 数据类型 / Data types & enums
+│   ├── schema/           # LLM 响应模式 / LLM response schema
+│   ├── config/           # 配置加载 / Config loading
+│   ├── prompt/           # 提示词构建 / Prompt builder
+│   ├── client/           # LLM 客户端 / LLM client
+│   ├── runner/           # 实验运行器 / Experiment runner
+│   └── recorder/         # JSONL 记录器 / JSONL recorder
 ├── tests/                # 单元测试 / Unit tests
 ├── scripts/              # 脚本 / Scripts
 │   └── verify_10calls.py # 功能验证 / Functional verification
@@ -47,7 +47,7 @@ Prompt templates are in `configs/prompt_templates/` — four variants (A–D) wi
 ## Testing / 测试
 
 ```bash
-pytest
+uv run pytest
 ```
 
 ## Data Format / 数据格式

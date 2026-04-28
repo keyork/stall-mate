@@ -11,9 +11,9 @@ Phase 1 framework implemented. Core pipeline works: config → prompt → API ca
 ## Commands
 
 ```bash
-pip install -e .          # Install package
-pytest                    # Run tests (74 tests)
-python scripts/verify_10calls.py  # 10-call functional verification (requires API)
+uv sync                    # Install dependencies
+uv run pytest              # Run tests (74 tests)
+uv run python scripts/verify_10calls.py  # 10-call functional verification (requires API)
 ```
 
 ## Architecture

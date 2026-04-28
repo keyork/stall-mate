@@ -1,7 +1,3 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "stall-mate"
 version = "0.1.0"
@@ -16,11 +12,15 @@ dependencies = [
     "httpx>=0.27",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-cov",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/stall_mate"]
