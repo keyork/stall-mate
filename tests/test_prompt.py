@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for stall_mate.prompt / 提示词构建器测试"""
+"""提示词构建器测试 | Tests for stall_mate.prompt."""
 
 import pytest
 

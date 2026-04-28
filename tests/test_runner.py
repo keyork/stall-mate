@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""ExperimentRunner tests with mocked dependencies."""
+"""ExperimentRunner 测试 | ExperimentRunner tests with mocked dependencies."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from stall_mate.config import ExperimentConfig, ModelConfig, PromptTemplateConfig
-from stall_mate.runner import ExperimentRunner
+from stall_mate.runner import ExperimentRunner, RunStats
 from stall_mate.schema import StallChoice
 from stall_mate.types import ChoiceStatus
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -38,9 +38,9 @@ def runner(client: MagicMock, recorder: MagicMock, model_config: ModelConfig) ->
     return ExperimentRunner(client=client, recorder=recorder, model_config=model_config)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _classify_response
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestClassifyResponse:
@@ -57,9 +57,9 @@ class TestClassifyResponse:
         assert runner._classify_response("It depends on your preference", None, 5) == ChoiceStatus.AMBIGUOUS
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _extract_choice_from_text
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestExtractChoiceFromText:
@@ -75,9 +75,9 @@ class TestExtractChoiceFromText:
         assert runner._extract_choice_from_text("我选第6个", 5) is None
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # run_single
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestRunSingle:
@@ -180,9 +180,9 @@ class TestRunSingle:
         assert "RuntimeError" in record.raw_response
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # run_experiment
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestRunExperiment:
@@ -211,10 +211,13 @@ class TestRunExperiment:
         )
         client.query_structured.return_value = (parsed, "{}", 0, 0)
 
-        records = runner.run_experiment(experiment_config, templates)
+        stats = runner.run_experiment(experiment_config, templates)
 
         expected_count = 2 * 2 * 2 * 2  # num_stalls × temps × templates × reps
-        assert len(records) == expected_count
+        assert isinstance(stats, RunStats)
+        assert stats.total_calls == expected_count
+        assert stats.valid == expected_count
+        assert stats.error == 0
         assert client.query_structured.call_count == expected_count
 
     def test_run_experiment_retries_on_error(self, runner: ExperimentRunner, client: MagicMock):
@@ -243,13 +246,13 @@ class TestRunExperiment:
             (parsed, "{}", 0, 0),
         ]
 
-        records = runner.run_experiment(experiment_config, templates, max_retries=3)
+        stats = runner.run_experiment(experiment_config, templates, max_retries=3)
 
-        assert len(records) == 2  # 1 error + 1 success
-        error_records = [r for r in records if r.choice_status == ChoiceStatus.ERROR]
-        success_records = [r for r in records if r.choice_status == ChoiceStatus.VALID]
-        assert len(error_records) == 1  # first attempt error record
-        assert len(success_records) == 1  # retry success
+        assert isinstance(stats, RunStats)
+        assert stats.total_calls == 2  # 1 error + 1 success
+        assert stats.error == 1  # first attempt error
+        assert stats.valid == 1  # retry success
+        assert stats.retries_used == 1  # 1 task retried
 
     def test_run_experiment_exhausts_retries(self, runner: ExperimentRunner, client: MagicMock):
         experiment_config = ExperimentConfig(
@@ -269,9 +272,11 @@ class TestRunExperiment:
         # All calls fail
         client.query_structured.return_value = (None, "ConnectionError: timeout", 0, 0)
 
-        records = runner.run_experiment(experiment_config, templates, max_retries=2)
+        stats = runner.run_experiment(experiment_config, templates, max_retries=2)
 
         # 1 original + 2 retries = 3 error records
-        assert len(records) == 3
-        assert all(r.choice_status == ChoiceStatus.ERROR for r in records)
+        assert stats.total_calls == 3
+        assert stats.error == 3
+        assert stats.valid == 0
+        assert stats.retries_used == 2  # 1 task retried twice (rounds 1 and 2)
         assert client.query_structured.call_count == 3
