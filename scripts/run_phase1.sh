@@ -70,7 +70,7 @@ for cfg in configs:
     total += calls
 print(f'')
 print(f'总计: {total} 次调用')
-print(f'预估耗时: {int(total * 20 / 3600)}~{int(total * 30 / 3600)} 小时（按每次 20~30 秒估算）')
+print(f'预估耗时: {int(total * 20 / 4 / 3600)}~{int(total * 30 / 4 / 3600)} 小时（按每次 20~30 秒，4 并发估算）')
 " 2>/dev/null)
 
 echo "----------------------------------------"
@@ -139,6 +139,7 @@ for cfg in experiment_configs:
         refusal_keywords=classification_cfg.refusal_keywords,
         extraction_patterns=classification_cfg.to_extraction_patterns(),
         display=display,
+        parallel_num=4,
     )
 
     exp_stats = runner.run_experiment(cfg, templates)

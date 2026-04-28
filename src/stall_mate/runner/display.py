@@ -104,6 +104,7 @@ class ExperimentDisplay:
             self._last_result_col,
             console=self._console,
             transient=False,
+            auto_refresh=True,
         )
 
     def format_record_status(self, record: ExperimentRecord) -> Text:

@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import random
 import re
+import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,7 +38,11 @@ class _Task:
 
 @dataclass
 class RunStats:
-    """实验运行统计 | Experiment run statistics."""
+    """实验运行统计 | Experiment run statistics.
+
+    Note: When using parallel execution, mutations (increment, append) must be
+    performed under ``ExperimentRunner._lock`` to ensure thread-safety.
+    """
 
     total_calls: int = 0
     valid: int = 0
@@ -89,11 +95,14 @@ class ExperimentRunner:
         refusal_keywords: list[str] | None = None,
         extraction_patterns: dict[str, list[str] | str] | None = None,
         display: ExperimentDisplay | None = None,
+        parallel_num: int = 4,
     ):
         self.client = client
         self.recorder = recorder
         self.model_config = model_config
         self._display = display or ExperimentDisplay()
+        self._parallel_num = parallel_num
+        self._lock = threading.Lock()
 
         classification = ClassificationConfig()
         keywords = refusal_keywords or classification.refusal_keywords
@@ -272,31 +281,46 @@ class ExperimentRunner:
         progress = self._display.create_progress(total, label)
         with progress:
             task_id = progress.add_task(label, total=total)
-            for task in tasks:
-                record = self.run_single(
-                    task.prompt, task.system_message,
-                    task.temperature, task.num_stalls, task.metadata,
-                )
+            with ThreadPoolExecutor(max_workers=self._parallel_num) as executor:
+                future_to_task = {}
+                for task in tasks:
+                    future = executor.submit(
+                        self.run_single,
+                        task.prompt, task.system_message,
+                        task.temperature, task.num_stalls, task.metadata,
+                    )
+                    future_to_task[future] = task
 
-                stats.total_calls += 1
-                stats.total_latency_ms += record.latency_ms
-                if record.choice_status == ChoiceStatus.VALID:
-                    stats.valid += 1
-                elif record.choice_status == ChoiceStatus.REFUSED:
-                    stats.refused += 1
-                elif record.choice_status == ChoiceStatus.AMBIGUOUS:
-                    stats.ambiguous += 1
-                elif record.choice_status == ChoiceStatus.ERROR:
-                    stats.error += 1
-                    failed.append(task)
+                for future in as_completed(future_to_task):
+                    task = future_to_task[future]
+                    try:
+                        record = future.result()
+                    except Exception as e:
+                        record = self._make_error_record(
+                            task.prompt, task.temperature, task.num_stalls,
+                            task.metadata, f"ThreadError: {e}",
+                        )
 
-                status_text = self._display.format_record_status(record)
-                choice_str = f"#{record.extracted_choice}" if record.extracted_choice is not None else "-"
-                progress.update(
-                    task_id,
-                    advance=1,
-                    description=f"[{record.choice_status.value}] {choice_str}",
-                )
+                    with self._lock:
+                        stats.total_calls += 1
+                        stats.total_latency_ms += record.latency_ms
+                        if record.choice_status == ChoiceStatus.VALID:
+                            stats.valid += 1
+                        elif record.choice_status == ChoiceStatus.REFUSED:
+                            stats.refused += 1
+                        elif record.choice_status == ChoiceStatus.AMBIGUOUS:
+                            stats.ambiguous += 1
+                        elif record.choice_status == ChoiceStatus.ERROR:
+                            stats.error += 1
+                            failed.append(task)
+
+                    status_text = self._display.format_record_status(record)
+                    choice_str = f"#{record.extracted_choice}" if record.extracted_choice is not None else "-"
+                    progress.update(
+                        task_id,
+                        advance=1,
+                        description=f"[{record.choice_status.value}] {choice_str}",
+                    )
 
         return failed
 
