@@ -35,6 +35,7 @@ class ChoiceStatus(str, Enum):
     VALID = "VALID"
     REFUSED = "REFUSED"
     AMBIGUOUS = "AMBIGUOUS"
+    ERROR = "ERROR"
 
 
 class ExperimentRecord(BaseModel):

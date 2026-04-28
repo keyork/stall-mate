@@ -139,6 +139,46 @@ class TestRunSingle:
         assert record.raw_response == "我觉得第3个比较好"
         recorder.record.assert_called_once()
 
+    def test_run_single_api_error(self, runner: ExperimentRunner, client: MagicMock, recorder: MagicMock):
+        client.query_structured.return_value = (None, "ConnectionError: Connection refused", 0, 0)
+
+        record = runner.run_single(
+            prompt="Choose a stall",
+            system_message="system",
+            temperature=0.0,
+            num_stalls=5,
+            metadata={
+                "experiment_phase": "Phase1",
+                "experiment_group": "G3",
+                "prompt_template": "A",
+                "prompt_text": "Choose a stall",
+            },
+        )
+
+        assert record.choice_status == ChoiceStatus.ERROR
+        assert record.extracted_choice is None
+        assert "ConnectionError" in record.raw_response
+        recorder.record.assert_called_once()
+
+    def test_run_single_exception_caught(self, runner: ExperimentRunner, client: MagicMock, recorder: MagicMock):
+        client.query_structured.side_effect = RuntimeError("unexpected boom")
+
+        record = runner.run_single(
+            prompt="Choose a stall",
+            system_message="system",
+            temperature=0.0,
+            num_stalls=5,
+            metadata={
+                "experiment_phase": "Phase1",
+                "experiment_group": "G4",
+                "prompt_template": "A",
+                "prompt_text": "Choose a stall",
+            },
+        )
+
+        assert record.choice_status == ChoiceStatus.ERROR
+        assert "RuntimeError" in record.raw_response
+
 
 # ---------------------------------------------------------------------------
 # run_experiment
@@ -176,3 +216,62 @@ class TestRunExperiment:
         expected_count = 2 * 2 * 2 * 2  # num_stalls × temps × templates × reps
         assert len(records) == expected_count
         assert client.query_structured.call_count == expected_count
+
+    def test_run_experiment_retries_on_error(self, runner: ExperimentRunner, client: MagicMock):
+        experiment_config = ExperimentConfig(
+            experiment_id="exp2",
+            experiment_group="G2",
+            phase="Phase1",
+            description="retry test",
+            num_stalls=[3],
+            temperatures=[0.0],
+            templates=["A"],
+            repetitions=1,
+        )
+        templates = PromptTemplateConfig(
+            templates={"A": "Pick from {num_stalls} stalls"},
+        )
+
+        parsed = StallChoice(
+            chosen_stall=2,
+            chain_of_thought="reasoning text here that is long enough",
+            confidence=0.5,
+        )
+        # First call fails, second succeeds
+        client.query_structured.side_effect = [
+            (None, "ConnectionError: timeout", 0, 0),
+            (parsed, "{}", 0, 0),
+        ]
+
+        records = runner.run_experiment(experiment_config, templates, max_retries=3)
+
+        assert len(records) == 2  # 1 error + 1 success
+        error_records = [r for r in records if r.choice_status == ChoiceStatus.ERROR]
+        success_records = [r for r in records if r.choice_status == ChoiceStatus.VALID]
+        assert len(error_records) == 1  # first attempt error record
+        assert len(success_records) == 1  # retry success
+
+    def test_run_experiment_exhausts_retries(self, runner: ExperimentRunner, client: MagicMock):
+        experiment_config = ExperimentConfig(
+            experiment_id="exp3",
+            experiment_group="G3",
+            phase="Phase1",
+            description="exhaust retry test",
+            num_stalls=[3],
+            temperatures=[0.0],
+            templates=["A"],
+            repetitions=1,
+        )
+        templates = PromptTemplateConfig(
+            templates={"A": "Pick from {num_stalls} stalls"},
+        )
+
+        # All calls fail
+        client.query_structured.return_value = (None, "ConnectionError: timeout", 0, 0)
+
+        records = runner.run_experiment(experiment_config, templates, max_retries=2)
+
+        # 1 original + 2 retries = 3 error records
+        assert len(records) == 3
+        assert all(r.choice_status == ChoiceStatus.ERROR for r in records)
+        assert client.query_structured.call_count == 3

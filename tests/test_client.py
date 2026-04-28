@@ -238,7 +238,7 @@ class TestQueryPlain:
 
 class TestConnectionError:
     @patch("stall_mate.client.llm_client.OpenAI")
-    def test_connection_error_propagates(self, mock_openai_cls):
+    def test_connection_error_returns_none(self, mock_openai_cls):
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = ConnectionError(
             "Connection refused"
@@ -246,5 +246,11 @@ class TestConnectionError:
         mock_openai_cls.return_value = mock_client
 
         client = LLMClient(endpoint="http://localhost:3000/v1", model="glm-5.1")
-        with pytest.raises(ConnectionError, match="Connection refused"):
-            client.query_plain(prompt="Hi", system_message="Be helpful")
+        client._mode = "PLAIN_TEXT"
+        result, raw, tokens, latency = client.query_structured(
+            prompt="Hi", system_message="Be helpful"
+        )
+
+        assert result is None
+        assert "ConnectionError" in raw
+        assert isinstance(latency, int)

@@ -102,6 +102,9 @@ class LLMClient:
     ) -> tuple[StallChoice | None, str, int, int]:
         """结构化输出查询 / Query with structured output enforcement.
 
+        任何异常（网络错误、API 错误、解析错误）均被捕获，不会向外抛出。
+        All exceptions are caught internally; this method never raises.
+
         Args:
             prompt: 用户提示词 / User prompt.
             system_message: 系统消息 / System message.
@@ -109,8 +112,8 @@ class LLMClient:
             num_stalls: 坑位数量（用于验证）/ Number of stalls (for validation).
 
         Returns:
-            (解析结果或 None, 原始响应, token 数, 延迟毫秒)
-            (parsed_response or None, raw_response, response_tokens, latency_ms)
+            (解析结果或 None, 原始响应或错误信息, token 数, 延迟毫秒)
+            (parsed_response or None, raw_response_or_error, response_tokens, latency_ms)
         """
         if self._mode is None:
             self.probe_api()
@@ -146,9 +149,9 @@ class LLMClient:
                     prompt, system_message, temperature
                 )
                 return None, raw, tokens, latency
-        except (ValidationError, Exception) as e:
+        except Exception as e:
             latency = int((time.time() - start) * 1000)
-            return None, str(e), 0, latency
+            return None, f"{type(e).__name__}: {e}", 0, latency
 
     def query_plain(
         self,
