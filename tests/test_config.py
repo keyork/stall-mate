@@ -8,10 +8,12 @@ from pydantic import ValidationError
 import yaml
 
 from stall_mate.config import (
+    ClassificationConfig,
     ExperimentConfig,
     ModelConfig,
     PromptTemplateConfig,
     discover_experiments,
+    load_classification_config,
     load_experiment_config,
     load_model_config,
     load_prompt_templates,
@@ -227,3 +229,120 @@ class TestDiscoverExperiments:
         configs = discover_experiments(exp_dir)
         assert len(configs) == 1
         assert configs[0].experiment_id == "exp-100"
+
+
+# ---------------------------------------------------------------------------
+# ModelConfig new fields
+# ---------------------------------------------------------------------------
+
+
+class TestModelConfigNewFields:
+    def test_new_defaults(self, tmp_path: Path):
+        data = {"models": [{"name": "test", "endpoint": "http://localhost"}]}
+        p = _write_yaml(tmp_path / "models.yaml", data)
+        cfg = load_model_config(p)
+        assert cfg.timeout == 60
+        assert cfg.max_retries == 2
+        assert cfg.probe_message == "Say OK"
+
+    def test_new_fields_from_yaml(self, tmp_path: Path):
+        data = {
+            "models": [{
+                "name": "test",
+                "endpoint": "http://localhost",
+                "timeout": 120,
+                "max_retries": 5,
+                "probe_message": "Ping",
+            }]
+        }
+        p = _write_yaml(tmp_path / "models.yaml", data)
+        cfg = load_model_config(p)
+        assert cfg.timeout == 120
+        assert cfg.max_retries == 5
+        assert cfg.probe_message == "Ping"
+
+
+# ---------------------------------------------------------------------------
+# load_classification_config
+# ---------------------------------------------------------------------------
+
+
+class TestLoadClassificationConfig:
+    def test_valid_classification(self, tmp_path: Path):
+        data = {
+            "refusal_keywords": ["拒绝", "refuse"],
+            "chinese_patterns": [r"第\s*(\d+)\s*个"],
+            "english_patterns": [r"stall\s*(\d+)"],
+            "trailing_digit_pattern": r"(\d+)$",
+            "general_digit_pattern": r"\b(\d+)\b",
+            "direction_reversal": [
+                {"source": "左", "target": "右"},
+            ],
+        }
+        p = _write_yaml(tmp_path / "classification.yaml", data)
+        cfg = load_classification_config(p)
+        assert isinstance(cfg, ClassificationConfig)
+        assert cfg.refusal_keywords == ["拒绝", "refuse"]
+        assert cfg.chinese_patterns == [r"第\s*(\d+)\s*个"]
+        assert cfg.direction_reversal[0].source == "左"
+
+    def test_defaults(self, tmp_path: Path):
+        p = _write_yaml(tmp_path / "classification.yaml", {})
+        cfg = load_classification_config(p)
+        assert isinstance(cfg, ClassificationConfig)
+        assert "无法" in cfg.refusal_keywords
+        assert len(cfg.chinese_patterns) >= 1
+
+    def test_empty_file_uses_defaults(self, tmp_path: Path):
+        p = tmp_path / "classification.yaml"
+        p.write_text("")
+        cfg = load_classification_config(p)
+        assert isinstance(cfg, ClassificationConfig)
+        assert len(cfg.refusal_keywords) > 0
+
+    def test_to_extraction_patterns(self, tmp_path: Path):
+        data = {
+            "chinese_patterns": [r"第(\d+)个"],
+            "english_patterns": [r"stall (\d+)"],
+            "trailing_digit_pattern": r"(\d+)$",
+            "general_digit_pattern": r"\b(\d+)\b",
+        }
+        p = _write_yaml(tmp_path / "classification.yaml", data)
+        cfg = load_classification_config(p)
+        patterns = cfg.to_extraction_patterns()
+        assert patterns["chinese_patterns"] == [r"第(\d+)个"]
+        assert patterns["trailing_digit_pattern"] == r"(\d+)$"
+
+    def test_to_reversal_pairs(self, tmp_path: Path):
+        data = {
+            "direction_reversal": [
+                {"source": "A", "target": "B"},
+                {"source": "C", "target": "D"},
+            ],
+        }
+        p = _write_yaml(tmp_path / "classification.yaml", data)
+        cfg = load_classification_config(p)
+        pairs = cfg.to_reversal_pairs()
+        assert pairs == [{"source": "A", "target": "B"}, {"source": "C", "target": "D"}]
+
+
+# ---------------------------------------------------------------------------
+# PromptTemplateConfig system_message_template
+# ---------------------------------------------------------------------------
+
+
+class TestSystemMessageTemplate:
+    def test_default_system_message(self, tmp_path: Path):
+        data = {"templates": {"A": "Pick from {num_stalls}"}}
+        p = _write_yaml(tmp_path / "tpl.yaml", data)
+        cfg = load_prompt_templates(p)
+        assert "{num_stalls}" in cfg.system_message_template
+
+    def test_custom_system_message(self, tmp_path: Path):
+        data = {
+            "templates": {"A": "Pick"},
+            "system_message_template": "Custom {num_stalls} msg",
+        }
+        p = _write_yaml(tmp_path / "tpl.yaml", data)
+        cfg = load_prompt_templates(p)
+        assert cfg.system_message_template == "Custom {num_stalls} msg"

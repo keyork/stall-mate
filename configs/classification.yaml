@@ -1,0 +1,38 @@
+# 分类配置 / Classification configuration
+# 响应分类和文本提取所需的模式 / Patterns for response classification and text extraction
+
+# 拒绝关键词（不区分大小写） / Refusal keywords (case-insensitive)
+refusal_keywords:
+  - "无法"
+  - "不能"
+  - "拒绝"
+  - "refuse"
+  - "cannot"
+  - "won't"
+  - "I can't"
+  - "inappropriate"
+
+# 从纯文本中提取坑位编号的正则模式 / Regex patterns for extracting stall numbers from plain text
+# 按优先级顺序匹配，第一个匹配成功即返回 / Matched in priority order, first match wins
+
+chinese_patterns:
+  - "第\\s*(\\d+)\\s*个"
+  - "(\\d+)\\s*号"
+  - "选择.*?(\\d+)"
+
+english_patterns:
+  - "stall\\s*(\\d+)"
+  - "number\\s*(\\d+)"
+
+# 末尾裸数字 / Bare digit at end of response
+trailing_digit_pattern: "(\\d+)\\s*[。.!?]?\\s*$"
+
+# 最后一个在范围内的数字 / Last digit in valid range (fallback)
+general_digit_pattern: "\\b(\\d+)\\b"
+
+# 方向反转替换对 / Direction reversal string pairs (source → target)
+direction_reversal:
+  - source: "从左到右"
+    target: "从右到左"
+  - source: "from left to right"
+    target: "from right to left"

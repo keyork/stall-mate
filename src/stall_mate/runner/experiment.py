@@ -26,29 +26,67 @@ from stall_mate.types import (
     PromptTemplate,
 )
 
-# 拒绝关键词 / Refusal keywords (case-insensitive check)
-_REFUSAL_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(p, re.IGNORECASE)
-    for p in (
-        "无法",
-        "不能",
-        "拒绝",
-        "refuse",
-        "cannot",
-        "won't",
-        "I can't",
-        "inappropriate",
-    )
+# 默认拒绝关键词 / Default refusal keywords
+_DEFAULT_REFUSAL_KEYWORDS: list[str] = [
+    "无法",
+    "不能",
+    "拒绝",
+    "refuse",
+    "cannot",
+    "won't",
+    "I can't",
+    "inappropriate",
 ]
+
+# 默认文本提取模式 / Default text extraction patterns
+_DEFAULT_EXTRACTION_PATTERS: dict[str, list[str] | str] = {
+    "chinese_patterns": [
+        r"第\s*(\d+)\s*个",
+        r"(\d+)\s*号",
+        r"选择.*?(\d+)",
+    ],
+    "english_patterns": [
+        r"stall\s*(\d+)",
+        r"number\s*(\d+)",
+    ],
+    "trailing_digit_pattern": r"(\d+)\s*[。.!?]?\s*$",
+    "general_digit_pattern": r"\b(\d+)\b",
+}
 
 
 class ExperimentRunner:
     """实验运行器 / Experiment runner — orchestrates the full pipeline."""
 
-    def __init__(self, client: LLMClient, recorder: JSONLRecorder, model_config: ModelConfig):
+    def __init__(
+        self,
+        client: LLMClient,
+        recorder: JSONLRecorder,
+        model_config: ModelConfig,
+        refusal_keywords: list[str] | None = None,
+        extraction_patterns: dict[str, list[str] | str] | None = None,
+    ):
         self.client = client
         self.recorder = recorder
         self.model_config = model_config
+
+        keywords = refusal_keywords if refusal_keywords is not None else _DEFAULT_REFUSAL_KEYWORDS
+        self._refusal_patterns: list[re.Pattern[str]] = [
+            re.compile(p, re.IGNORECASE) for p in keywords
+        ]
+
+        patterns = (
+            extraction_patterns
+            if extraction_patterns is not None
+            else _DEFAULT_EXTRACTION_PATTERS
+        )
+        _cp = patterns.get("chinese_patterns", [])
+        self._chinese_patterns: list[str] = _cp if isinstance(_cp, list) else [_cp]
+        _ep = patterns.get("english_patterns", [])
+        self._english_patterns: list[str] = _ep if isinstance(_ep, list) else [_ep]
+        _tp = patterns.get("trailing_digit_pattern", r"(\d+)\s*[。.!?]?\s*$")
+        self._trailing_digit_pattern: str = _tp if isinstance(_tp, str) else str(_tp)
+        _gp = patterns.get("general_digit_pattern", r"\b(\d+)\b")
+        self._general_digit_pattern: str = _gp if isinstance(_gp, str) else str(_gp)
 
     # ------------------------------------------------------------------
     # Public API / 公开接口
@@ -146,7 +184,9 @@ class ExperimentRunner:
         records: list[ExperimentRecord] = []
         for num_stalls, temperature, template_key, _rep_idx in combos:
             prompt = build_prompt(templates.templates[template_key], num_stalls)
-            system_message = build_system_message(num_stalls)
+            system_message = build_system_message(
+                num_stalls, template=templates.system_message_template,
+            )
             metadata: dict[str, Any] = {
                 "experiment_phase": experiment_config.phase,
                 "experiment_group": experiment_config.experiment_group,
@@ -169,8 +209,8 @@ class ExperimentRunner:
     # Private helpers / 私有辅助方法
     # ------------------------------------------------------------------
 
-    @staticmethod
     def _classify_response(
+        self,
         raw_response: str,
         extracted_choice: int | None,
         num_stalls: int,
@@ -188,25 +228,19 @@ class ExperimentRunner:
         if extracted_choice is not None and 1 <= extracted_choice <= num_stalls:
             return ChoiceStatus.VALID
 
-        for pat in _REFUSAL_PATTERNS:
+        for pat in self._refusal_patterns:
             if pat.search(raw_response):
                 return ChoiceStatus.REFUSED
 
         return ChoiceStatus.AMBIGUOUS
 
-    @staticmethod
-    def _extract_choice_from_text(raw_response: str, num_stalls: int) -> int | None:
+    def _extract_choice_from_text(self, raw_response: str, num_stalls: int) -> int | None:
         """从纯文本中提取坑位编号 / Extract stall number from plain text.
 
         依次尝试中文模式、英文模式、末尾数字和最后一个在范围内的数字。
         """
         # 中文模式 / Chinese patterns
-        cn_patterns = [
-            r"第\s*(\d+)\s*个",
-            r"(\d+)\s*号",
-            r"选择.*?(\d+)",
-        ]
-        for pat in cn_patterns:
+        for pat in self._chinese_patterns:
             m = re.search(pat, raw_response)
             if m:
                 val = int(m.group(1))
@@ -214,11 +248,7 @@ class ExperimentRunner:
                     return val
 
         # 英文模式 / English patterns
-        en_patterns = [
-            r"stall\s*(\d+)",
-            r"number\s*(\d+)",
-        ]
-        for pat in en_patterns:
+        for pat in self._english_patterns:
             m = re.search(pat, raw_response, re.IGNORECASE)
             if m:
                 val = int(m.group(1))
@@ -226,14 +256,14 @@ class ExperimentRunner:
                     return val
 
         # 末尾裸数字 / Bare digit at end of response
-        m = re.search(r"(\d+)\s*[。.!?]?\s*$", raw_response)
+        m = re.search(self._trailing_digit_pattern, raw_response)
         if m:
             val = int(m.group(1))
             if 1 <= val <= num_stalls:
                 return val
 
         # 最后一个在范围内的数字 / Last digit in range
-        all_digits = re.findall(r"\b(\d+)\b", raw_response)
+        all_digits = re.findall(self._general_digit_pattern, raw_response)
         for d in reversed(all_digits):
             val = int(d)
             if 1 <= val <= num_stalls:

@@ -15,7 +15,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from stall_mate.client import LLMClient
-from stall_mate.config import load_model_config, load_prompt_templates
+from stall_mate.config import (
+    load_model_config,
+    load_prompt_templates,
+    load_classification_config,
+)
 from stall_mate.prompt import build_prompt, build_system_message
 from stall_mate.recorder import JSONLRecorder
 from stall_mate.runner import ExperimentRunner
@@ -25,18 +29,28 @@ def main():
     # 1. Load configs
     model_cfg = load_model_config(ROOT / "configs" / "models.yaml")
     templates = load_prompt_templates(ROOT / "configs" / "prompt_templates" / "phase1.yaml")
+    classification_cfg = load_classification_config(ROOT / "configs" / "classification.yaml")
 
     # 2. Initialize components
     client = LLMClient(
         endpoint=model_cfg.endpoint,
         model=model_cfg.name,
         api_key=model_cfg.api_key,
+        timeout=model_cfg.timeout,
+        max_retries=model_cfg.max_retries,
+        probe_message=model_cfg.probe_message,
     )
     output_path = ROOT / "data" / "verify_10calls.jsonl"
     recorder = JSONLRecorder(output_path)
     # Clear previous results
     recorder.clear()
-    runner = ExperimentRunner(client, recorder, model_cfg)
+    runner = ExperimentRunner(
+        client=client,
+        recorder=recorder,
+        model_config=model_cfg,
+        refusal_keywords=classification_cfg.refusal_keywords,
+        extraction_patterns=classification_cfg.to_extraction_patterns(),
+    )
 
     # 3. Define 10 verification calls
     calls = [
@@ -70,7 +84,9 @@ def main():
         )
 
         prompt = build_prompt(templates.templates[call["template"]], call["num_stalls"])
-        system_msg = build_system_message(call["num_stalls"])
+        system_msg = build_system_message(
+            call["num_stalls"], template=templates.system_message_template,
+        )
 
         metadata = {
             "experiment_phase": "Phase1",

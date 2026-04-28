@@ -29,11 +29,14 @@ class LLMClient:
     and falls back gracefully.
     """
 
-    def __init__(self, endpoint: str, model: str, api_key: str = "", timeout: int = 60):
+    def __init__(self, endpoint: str, model: str, api_key: str = "", timeout: int = 60,
+                 max_retries: int = 2, probe_message: str = "Say OK"):
         self.endpoint = endpoint
         self.model = model
         self.api_key = api_key
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.probe_message = probe_message
         self._openai_client: OpenAI | None = None
         self._mode: str | None = None
 
@@ -64,7 +67,7 @@ class LLMClient:
             inst.chat.completions.create(
                 model=self.model,
                 response_model=str,
-                messages=[{"role": "user", "content": "Say OK"}],
+                messages=[{"role": "user", "content": self.probe_message}],
                 max_retries=0,
             )
             self._mode = "TOOLS"
@@ -78,7 +81,7 @@ class LLMClient:
             inst.chat.completions.create(
                 model=self.model,
                 response_model=str,
-                messages=[{"role": "user", "content": "Say OK"}],
+                messages=[{"role": "user", "content": self.probe_message}],
                 max_retries=0,
             )
             self._mode = "JSON_SCHEMA"
@@ -132,7 +135,7 @@ class LLMClient:
                         {"role": "user", "content": prompt},
                     ],
                     temperature=temperature,
-                    max_retries=2,
+                    max_retries=self.max_retries,
                     context={"num_stalls": num_stalls},
                 )
                 latency = int((time.time() - start) * 1000)

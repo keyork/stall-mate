@@ -3,3 +3,6 @@ models:
     endpoint: http://localhost:3000/v1
     api_key: ""
     version: "latest"
+    timeout: 60
+    max_retries: 2
+    probe_message: "Say OK"

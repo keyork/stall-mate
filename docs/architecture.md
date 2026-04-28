@@ -124,9 +124,11 @@ Stall Mate tests whether frontier LLMs make consistent decisions when presented 
 
 | Model | Source | Key fields |
 |-------|--------|------------|
-| `ModelConfig` | `configs/models.yaml` | `name`, `endpoint`, `api_key`, `version` |
+| `ModelConfig` | `configs/models.yaml` | `name`, `endpoint`, `api_key`, `version`, `timeout`, `max_retries`, `probe_message` |
 | `ExperimentConfig` | `configs/experiments/*.yaml` | `experiment_id`, `num_stalls`, `temperatures`, `templates`, `repetitions`, `conditions`, `occupied_stalls` |
-| `PromptTemplateConfig` | `configs/prompt_templates/*.yaml` | `templates: dict[str, str]` |
+| `PromptTemplateConfig` | `configs/prompt_templates/*.yaml` | `templates: dict[str, str]`, `system_message_template` |
+| `ClassificationConfig` | `configs/classification.yaml` | `refusal_keywords`, `chinese_patterns`, `english_patterns`, `trailing_digit_pattern`, `general_digit_pattern`, `direction_reversal` |
+| `DirectionReversalPair` | (embedded in ClassificationConfig) | `source`, `target` |
 
 **Loading functions:**
 
@@ -136,7 +138,12 @@ Stall Mate tests whether frontier LLMs make consistent decisions when presented 
 | `load_model_config(path)` | models.yaml path | `ModelConfig` |
 | `load_experiment_config(path)` | experiment YAML path | `ExperimentConfig` |
 | `load_prompt_templates(path)` | template YAML path | `PromptTemplateConfig` |
+| `load_classification_config(path)` | classification YAML path | `ClassificationConfig` |
 | `discover_experiments(config_dir)` | experiments directory | `list[ExperimentConfig]` |
+
+`ClassificationConfig` provides two helper methods:
+- `to_extraction_patterns() -> dict` — converts to the format expected by `ExperimentRunner`
+- `to_reversal_pairs() -> list[dict]` — converts to the format expected by `build_reverse_prompt()`
 
 ### 3.4 `prompt/` — Prompt Builder / 提示词构建
 
@@ -146,9 +153,9 @@ Stall Mate tests whether frontier LLMs make consistent decisions when presented 
 
 - **`build_prompt(template_text, num_stalls, **kwargs) -> str`** — Substitutes `{num_stalls}` and any additional placeholders in the template string
 
-- **`build_system_message(num_stalls) -> str`** — Returns a bilingual system message instructing the model to respond in JSON format with `chosen_stall`, `chain_of_thought`, and `confidence` fields
+- **`build_system_message(num_stalls, template=None) -> str`** — Returns a system message for structured JSON output. Uses the provided template (typically loaded from `PromptTemplateConfig.system_message_template`) or falls back to a built-in default. The template must contain a `{num_stalls}` placeholder.
 
-- **`build_reverse_prompt(template_text, num_stalls, **kwargs) -> str`** — Creates a direction-reversed prompt by swapping "从左到右" to "从右到左" (and English equivalents). Used in symmetry experiment 1.2 to test whether direction framing affects choice.
+- **`build_reverse_prompt(template_text, num_stalls, reversal_pairs=None, **kwargs) -> str`** — Creates a direction-reversed prompt by applying a list of `{"source": "...", "target": "..."}` replacements. Defaults to the built-in Chinese/English direction pairs. Used in symmetry experiment 1.2.
 
 ### 3.5 `client/` — LLM Client / LLM 客户端
 
@@ -157,10 +164,10 @@ Stall Mate tests whether frontier LLMs make consistent decisions when presented 
 **`LLMClient` class:**
 
 ```
-LLMClient(endpoint, model, api_key="", timeout=60)
+LLMClient(endpoint, model, api_key="", timeout=60, max_retries=2, probe_message="Say OK")
 ```
 
-**Initialization:** Lazy — the underlying `OpenAI` client is created on first use, not at construction time.
+**Initialization:** Lazy — the underlying `OpenAI` client is created on first use, not at construction time. All parameters default to sensible values but are typically loaded from `ModelConfig`.
 
 **API probing — `probe_api() -> str`:**
 
@@ -206,8 +213,12 @@ The output directory is created automatically on initialization.
 **`ExperimentRunner` class:**
 
 ```
-ExperimentRunner(client: LLMClient, recorder: JSONLRecorder, model_config: ModelConfig)
+ExperimentRunner(client, recorder, model_config, refusal_keywords=None, extraction_patterns=None)
 ```
+
+**Parameters:**
+- `refusal_keywords` — list of refusal keyword strings (loaded from `ClassificationConfig.refusal_keywords`). Defaults to built-in Chinese/English keywords.
+- `extraction_patterns` — dict of regex pattern lists for text extraction (loaded via `ClassificationConfig.to_extraction_patterns()`). Defaults to built-in patterns.
 
 **Public methods:**
 
@@ -250,9 +261,33 @@ models:
     endpoint: http://localhost:3000/v1    # Base URL — SDK appends /chat/completions
     api_key: ""                            # Optional, defaults to "unused"
     version: "latest"                      # Optional, defaults to "unknown"
+    timeout: 60                            # API call timeout in seconds
+    max_retries: 2                         # Max retries for structured output
+    probe_message: "Say OK"                # Message used to probe API capabilities
 ```
 
 Note: `endpoint` is the base URL. The OpenAI SDK automatically appends `/chat/completions`.
+
+### 4.1.1 Classification Configuration / 分类配置
+
+**File:** `configs/classification.yaml`
+
+Controls response classification and text extraction behavior:
+
+```yaml
+refusal_keywords: ["无法", "不能", "拒绝", "refuse", "cannot", "won't", "I can't", "inappropriate"]
+chinese_patterns: ["第\\s*(\\d+)\\s*个", "(\\d+)\\s*号", "选择.*?(\\d+)"]
+english_patterns: ["stall\\s*(\\d+)", "number\\s*(\\d+)"]
+trailing_digit_pattern: "(\\d+)\\s*[。.!?]?\\s*$"
+general_digit_pattern: "\\b(\\d+)\\b"
+direction_reversal:
+  - source: "从左到右"
+    target: "从右到左"
+  - source: "from left to right"
+    target: "from right to left"
+```
+
+All fields have sensible defaults — the file can be empty or missing.
 
 ### 4.2 Experiment Configuration / 实验配置
 
@@ -337,9 +372,9 @@ Each line in the output JSONL file is a complete `ExperimentRecord`:
 
 ### 6.1 Three-Tier Structured Output Fallback / 三级结构化输出回退
 
-**Decision:** `LLMClient.probe_api()` tries TOOLS, then JSON_SCHEMA, then falls back to PLAIN_TEXT.
+**Decision:** `LLMClient.probe_api()` tries TOOLS, then JSON_SCHEMA, then falls back to PLAIN_TEXT. Refusal keywords, text extraction regex patterns, and direction-reversal strings are all configurable via `configs/classification.yaml`.
 
-**Why:** Self-hosted or local model APIs (e.g. vLLM, Ollama, custom endpoints) often lack full OpenAI function calling support. Rather than failing, the client gracefully degrades. In PLAIN_TEXT mode, the runner uses regex-based text extraction (`_extract_choice_from_text()`) to parse the stall number from free-form responses.
+**Why:** Self-hosted or local model APIs (e.g. vLLM, Ollama, custom endpoints) often lack full OpenAI function calling support. Rather than failing, the client gracefully degrades. In PLAIN_TEXT mode, the runner uses regex-based text extraction (`_extract_choice_from_text()`) to parse the stall number from free-form responses. Externalizing these patterns to config allows researchers to adapt classification for new languages or model behaviors without code changes.
 
 ### 6.2 No litellm / 不使用 litellm
 
@@ -355,9 +390,9 @@ Each line in the output JSONL file is a complete `ExperimentRecord`:
 
 ### 6.4 Config-Driven / 配置驱动
 
-**Decision:** All experiment parameters, model settings, and prompt templates live in YAML files. No hardcoded values in Python.
+**Decision:** All experiment parameters, model settings, prompt templates, and classification patterns live in YAML files. No hardcoded values in Python.
 
-**Why:** Separates experiment design from implementation. Researchers can define new experiments by creating YAML files without touching code. Reduces risk of accidental code changes affecting experiment conditions.
+**Why:** Separates experiment design from implementation. Researchers can define new experiments, tune classification thresholds, or change system prompts by editing YAML files without touching code. Reduces risk of accidental code changes affecting experiment conditions.
 
 ### 6.5 JSONL Output / JSONL 输出
 
@@ -417,15 +452,29 @@ models:
     endpoint: http://localhost:3000/v1
     api_key: ""
     version: "latest"
+    timeout: 60
+    max_retries: 2
+    probe_message: "Say OK"
   - name: gpt-4o
     endpoint: https://api.openai.com/v1
     api_key: "sk-..."
     version: "2024-08-06"
+    timeout: 120
+    max_retries: 3
 ```
 
 Currently `load_model_config()` loads the first entry. For multi-model support, modify the loader to accept a model name parameter.
 
-### 7.4 Extend to Phase 2 / 扩展到第二阶段
+### 7.4 Customize Classification / 自定义分类
+
+Edit `configs/classification.yaml` to change:
+- **Refusal keywords** — add/remove keywords for new languages or model behaviors
+- **Text extraction patterns** — add regex patterns for new response formats
+- **Direction reversal pairs** — add new language pairs for symmetry tests
+
+All fields have defaults; the file can be partially filled.
+
+### 7.5 Extend to Phase 2 / 扩展到第二阶段
 
 Phase 2 introduces occupied stalls (some stalls are taken, the model must choose among remaining ones):
 
@@ -437,7 +486,7 @@ Phase 2 introduces occupied stalls (some stalls are taken, the model must choose
 3. Update `build_prompt()` to incorporate occupied stall information into the prompt text
 4. The `ExperimentRunner` and `ExperimentRecord` already support `occupied_stalls` — no changes needed
 
-### 7.5 Add Async Support / 添加异步支持
+### 7.6 Add Async Support / 添加异步支持
 
 Future optimization for large-scale experiments:
 

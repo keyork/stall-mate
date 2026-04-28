@@ -26,6 +26,9 @@ class ModelConfig(BaseModel):
     endpoint: str
     api_key: str = ""
     version: str = "unknown"
+    timeout: int = 60
+    max_retries: int = 2
+    probe_message: str = "Say OK"
 
 
 class ExperimentConfig(BaseModel):
@@ -47,6 +50,67 @@ class PromptTemplateConfig(BaseModel):
     """提示词模板配置 | Prompt template configuration."""
 
     templates: dict[str, str]
+    system_message_template: str = (
+        "你是一个正在选择公共厕所隔间的人。请用 JSON 格式回复。\n"
+        "You are choosing a toilet stall. Respond in JSON format.\n\n"
+        "有效坑位范围 / Valid stall range: 1 to {num_stalls}\n"
+        '回复格式 / Response format:\n'
+        '{{"chosen_stall": <int>, "chain_of_thought": "<str>", "confidence": <float>}}'
+    )
+
+
+class DirectionReversalPair(BaseModel):
+    """方向反转替换对 / Direction reversal string pair."""
+
+    source: str
+    target: str
+
+
+class ClassificationConfig(BaseModel):
+    """响应分类配置 / Response classification configuration."""
+
+    refusal_keywords: list[str] = [
+        "无法",
+        "不能",
+        "拒绝",
+        "refuse",
+        "cannot",
+        "won't",
+        "I can't",
+        "inappropriate",
+    ]
+    chinese_patterns: list[str] = [
+        r"第\s*(\d+)\s*个",
+        r"(\d+)\s*号",
+        r"选择.*?(\d+)",
+    ]
+    english_patterns: list[str] = [
+        r"stall\s*(\d+)",
+        r"number\s*(\d+)",
+    ]
+    trailing_digit_pattern: str = r"(\d+)\s*[。.!?]?\s*$"
+    general_digit_pattern: str = r"\b(\d+)\b"
+    direction_reversal: list[DirectionReversalPair] = [
+        DirectionReversalPair(source="从左到右", target="从右到左"),
+        DirectionReversalPair(source="from left to right", target="from right to left"),
+    ]
+
+    def to_extraction_patterns(self) -> dict[str, list[str] | str]:
+        """转换为 ExperimentRunner 所需的 extraction_patterns 格式。
+        Convert to extraction_patterns dict format expected by ExperimentRunner.
+        """
+        return {
+            "chinese_patterns": self.chinese_patterns,
+            "english_patterns": self.english_patterns,
+            "trailing_digit_pattern": self.trailing_digit_pattern,
+            "general_digit_pattern": self.general_digit_pattern,
+        }
+
+    def to_reversal_pairs(self) -> list[dict[str, str]]:
+        """转换为 builder 所需的 reversal_pairs 格式。
+        Convert to reversal_pairs list format expected by build_reverse_prompt.
+        """
+        return [{"source": p.source, "target": p.target} for p in self.direction_reversal]
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +162,14 @@ def load_prompt_templates(path: Path) -> PromptTemplateConfig:
     """从 YAML 加载提示词模板 | Load prompt templates from YAML."""
     data = load_yaml(path)
     return PromptTemplateConfig.model_validate(data)
+
+
+def load_classification_config(path: Path) -> ClassificationConfig:
+    """从 YAML 加载分类配置 | Load classification config from YAML."""
+    data = load_yaml(path)
+    if not data:
+        return ClassificationConfig()
+    return ClassificationConfig.model_validate(data)
 
 
 def discover_experiments(config_dir: Path) -> list[ExperimentConfig]:

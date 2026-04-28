@@ -59,6 +59,12 @@ class TestBuildSystemMessage:
         msg = build_system_message(3)
         assert "1 to 3" in msg
 
+    def test_custom_template(self):
+        template = "Pick a stall from 1 to {num_stalls}. Reply JSON."
+        msg = build_system_message(7, template=template)
+        assert "1 to 7" in msg
+        assert "Reply JSON" in msg
+
 
 class TestBuildReversePrompt:
     def test_reverses_direction(self):
@@ -71,3 +77,10 @@ class TestBuildReversePrompt:
         result = build_reverse_prompt(template, 4)
         assert "from right to left" in result
         assert "from left to right" not in result
+
+    def test_custom_reversal_pairs(self):
+        pairs = [{"source": "left", "target": "right"}]
+        template = "Pick from {num_stalls} stalls, left side preferred."
+        result = build_reverse_prompt(template, 5, reversal_pairs=pairs)
+        assert "right side" in result
+        assert "left side" not in result
