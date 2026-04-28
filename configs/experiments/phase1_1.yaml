@@ -1,0 +1,10 @@
+experiment_id: "1.1"
+experiment_group: "1.1"
+phase: "Phase1"
+description: "基准选择（全空坑位）/ Baseline choice (all stalls empty)"
+num_stalls: [3, 5, 7, 10]
+temperatures: [0.0, 0.7]
+templates: ["A", "B", "C"]
+repetitions: 30
+conditions: {}
+occupied_stalls: []

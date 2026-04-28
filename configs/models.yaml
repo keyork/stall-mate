@@ -1,0 +1,5 @@
+models:
+  - name: glm-5.1
+    endpoint: http://localhost:3000/v1
+    api_key: ""
+    version: "latest"

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stall-mate"
+version = "0.1.0"
+description = "坑位博弈：当大模型走进公共厕所 | LLM decision-consistency stress test"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "instructor>=1.0",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stall_mate"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

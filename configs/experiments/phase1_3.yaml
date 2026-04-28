@@ -1,0 +1,10 @@
+experiment_id: "1.3"
+experiment_group: "1.3"
+phase: "Phase1"
+description: "选项数量效应 / Option count effect"
+num_stalls: [3, 5, 7, 10, 15, 20]
+temperatures: [0.0, 0.7]
+templates: ["A", "B", "C"]
+repetitions: 30
+conditions: {}
+occupied_stalls: []
