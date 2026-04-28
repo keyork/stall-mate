@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""LLM 响应模式 / LLM response schema — structured output definitions."""
+"""LLM 响应模式 | LLM response schema for structured output."""
 
 from stall_mate.schema.stall_choice import (
     StallChoice,

@@ -14,9 +14,9 @@ import yaml
 from pydantic import BaseModel
 
 
-# ---------------------------------------------------------------------------
-# Pydantic configuration models / Pydantic 配置模型
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Pydantic configuration models
+# ------------------------------------------------------------------
 
 
 class ModelConfig(BaseModel):
@@ -113,9 +113,9 @@ class ClassificationConfig(BaseModel):
         return [{"source": p.source, "target": p.target} for p in self.direction_reversal]
 
 
-# ---------------------------------------------------------------------------
-# YAML loading helpers / YAML 加载辅助函数
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+# YAML loading helpers
+# ------------------------------------------------------------------
 
 
 def load_yaml(path: Path) -> dict:
@@ -173,7 +173,7 @@ def load_classification_config(path: Path) -> ClassificationConfig:
 
 
 def discover_experiments(config_dir: Path) -> list[ExperimentConfig]:
-    """扫描目录中的 YAML 文件并加载所有实验配置。
+    """扫描目录中的 YAML 文件并加载所有实验配置 | Discover and load all experiment configs from YAML files in a directory.
 
     Glob for ``*.yaml`` in *config_dir* and load each as ExperimentConfig.
     """

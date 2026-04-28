@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-LLM 响应模式定义 / LLM response schema definitions.
+LLM 响应模式定义 | LLM response schema definitions.
 
 定义大模型选择坑位的结构化输出格式。
 Defines the structured output format for LLM stall-choice responses.

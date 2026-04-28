@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Prompt builder / 提示词构建器
+"""提示词构建器 | Prompt builder.
 
 构建用于 LLM 厕所隔间选择实验的提示词。
 Builds prompts for the LLM toilet-stall decision experiment.

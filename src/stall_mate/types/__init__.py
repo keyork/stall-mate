@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""类型定义 / Type definitions — enums and data record models."""
+"""类型定义 | Type definitions for enums and data record models."""
 
 from stall_mate.types.record import (
     ChoiceStatus,

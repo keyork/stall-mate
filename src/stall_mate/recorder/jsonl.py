@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-JSONL 数据记录器 / JSONL data recorder.
+JSONL 数据记录器 | JSONL data recorder.
 
 将实验记录以 JSONL 格式写入文件，每行一条 JSON 记录。
 Writes experiment records as JSONL — one JSON object per line.

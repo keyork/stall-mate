@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-类型定义 — 实验数据结构
-Type definitions — experiment data structures.
+类型定义 | Type definitions for experiment data structures.
 
 定义实验中使用的枚举类型和数据记录模型。
 Defines enums and data record models used in the experiment.

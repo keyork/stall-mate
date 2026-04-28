@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""配置加载 / Configuration — YAML loading and Pydantic config models."""
+"""配置加载 | YAML configuration loading with Pydantic models."""
 
 from stall_mate.config.loader import (
     ClassificationConfig,

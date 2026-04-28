@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""
-LLM 客户端 / LLM API client with structured output support.
+"""LLM 客户端 | LLM API client with structured output support.
 
 通过 instructor 库实现结构化输出，包含三级回退链：
 TOOLS → JSON_SCHEMA → PLAIN_TEXT。
@@ -61,7 +60,7 @@ class LLMClient:
         """
         client = self._get_openai_client()
 
-        # 尝试 TOOLS 模式 / Try TOOLS mode
+        # Try TOOLS mode
         try:
             inst = instructor.from_openai(client, mode=instructor.Mode.TOOLS)
             inst.chat.completions.create(
@@ -75,7 +74,7 @@ class LLMClient:
         except Exception:
             pass
 
-        # 尝试 JSON_SCHEMA 模式 / Try JSON_SCHEMA mode
+        # Try JSON_SCHEMA mode
         try:
             inst = instructor.from_openai(client, mode=instructor.Mode.JSON_SCHEMA)
             inst.chat.completions.create(
@@ -89,7 +88,7 @@ class LLMClient:
         except Exception:
             pass
 
-        # 全部失败，回退纯文本 / All failed, fallback to plain text
+        # All failed, fallback to plain text
         self._mode = "PLAIN_TEXT"
         return self._mode
 
@@ -144,7 +143,7 @@ class LLMClient:
                 latency = int((time.time() - start) * 1000)
                 return result, result.model_dump_json(), 0, latency
             else:
-                # PLAIN_TEXT 回退 — 获取纯文本 / PLAIN_TEXT fallback
+                # PLAIN_TEXT fallback
                 raw, tokens, latency = self.query_plain(
                     prompt, system_message, temperature
                 )
