@@ -1,21 +1,18 @@
-# Stall Mate Architecture / 架构文档
+# Stall Mate 架构文档
 
-> Stall Mate — LLM decision-consistency stress test
-> 大模型决策一致性压力测试框架
-
----
-
-## 1. Overview / 概述
-
-Stall Mate tests whether frontier LLMs make consistent decisions when presented with a trivially simple scenario: choosing a toilet stall where all options are identical except position. By repeating the same (or equivalent) prompt hundreds of times across varying parameters, we can measure whether a model's "reasoning" reflects a stable preference or is simply hallucinated post-hoc justification.
-
-坑位博弈测试前沿大语言模型在面对极其简单的场景时，是否能做出一致的决策。通过在不同参数组合下重复相同（或等价）的提示词数百次，可以衡量模型的"推理"是稳定的偏好，还是随口编造的事后合理化。
+> 坑位博弈 — 大模型决策一致性压力测试框架
 
 ---
 
-## 2. Architecture Overview / 架构总览
+## 1. 概述
 
-### Data Flow / 数据流
+Stall Mate 测试前沿大语言模型在面对极其简单的场景时，是否能做出一致的决策：在一排条件完全相同的厕所隔间中，仅凭位置差异做出选择。通过在不同参数组合下重复相同（或等价）的提示词数百次，可以衡量模型的"推理"究竟是稳定的偏好，还是随口编造的事后合理化。
+
+---
+
+## 2. 架构总览
+
+### 数据流
 
 ```
                     ┌─────────────┐
@@ -24,255 +21,246 @@ Stall Mate tests whether frontier LLMs make consistent decisions when presented 
                     └──────┬──────┘
                            │
                     ┌──────▼──────┐
-                    │  Config     │  Load & validate
-                    │  Loader     │  Pydantic models
+                    │  配置加载器  │  读取 YAML，验证为
+                    │  Config     │  Pydantic 模型
+                    │  Loader     │
                     └──────┬──────┘
                            │
               ┌────────────┼────────────┐
               │            │            │
        ┌──────▼──────┐    │     ┌──────▼──────┐
-       │  Prompt     │    │     │  Model      │
+       │  提示词     │    │     │  模型配置   │
+       │  构建器     │    │     │  Model      │
        │  Builder    │    │     │  Config     │
        └──────┬──────┘    │     └──────┬──────┘
               │            │            │
               │    ┌───────▼───────┐    │
+              │    │  实验运行器   │    │
               │    │  Experiment   │    │
               │    │  Runner       │◄───┘
-              │    │  (orchestrator)
+              │    │  (编排器)     │
               │    └───┬───────┬───┘
               │        │       │
        ┌──────▼────────▼─┐   │
-       │  LLM Client     │   │
-       │  (3-tier fallback)│  │
+       │  LLM 客户端     │   │
+       │  (三级回退)     │   │
        └──────┬──────────┘   │
               │              │
        ┌──────▼──────────────▼──┐
-       │  JSONL Recorder        │
-       │  (append-only log)     │
+       │  JSONL 记录器          │
+       │  (追加写入日志)        │
        └───────────────────────┘
 ```
 
-**Pipeline steps / 流水线步骤:**
+**流水线步骤：**
 
-1. **Config Loader** reads YAML files and validates them into Pydantic models
-2. **Experiment Runner** generates all parameter combinations (num_stalls x temperatures x templates x repetitions), shuffles them to avoid order effects
-3. For each combination, **Prompt Builder** fills template placeholders
-4. **LLM Client** sends the prompt with structured output enforcement (3-tier fallback)
-5. Response is parsed, classified (VALID/REFUSED/AMBIGUOUS), and recorded
-6. **JSONL Recorder** appends one `ExperimentRecord` per line
+1. **配置加载器** 读取 YAML 文件，验证为 Pydantic 模型
+2. **实验运行器** 生成所有参数组合（num_stalls x temperatures x templates x repetitions），随机打乱以避免顺序效应
+3. 对每组参数，**提示词构建器** 填充模板中的占位符
+4. **LLM 客户端** 发送提示词，带结构化输出约束（三级回退）
+5. 响应被解析、分类（VALID/REFUSED/AMBIGUOUS）并记录
+6. **JSONL 记录器** 每行追加一条 `ExperimentRecord`
 
 ---
 
-## 3. Module Guide / 模块详解
+## 3. 模块详解
 
-### 3.1 `types/` — Data Types / 数据类型
+### 3.1 `types/` — 数据类型
 
-**Purpose:** Defines all enums and the core data record model.
+定义所有枚举和核心数据记录模型。
 
-**Key exports:**
+| 符号 | 类型 | 说明 |
+|------|------|------|
+| `ExperimentPhase` | `str, Enum` | `PHASE1`、`PHASE2` — 实验阶段标识 |
+| `PromptTemplate` | `str, Enum` | `A`、`B`、`C`、`D` — 提示词模板标识 |
+| `ChoiceStatus` | `str, Enum` | `VALID`、`REFUSED`、`AMBIGUOUS` — 响应分类 |
+| `ExperimentRecord` | `BaseModel` | 单次模型调用的完整记录（18 个字段） |
 
-| Symbol | Type | Description |
-|--------|------|-------------|
-| `ExperimentPhase` | `str, Enum` | `PHASE1`, `PHASE2` — identifies the experiment phase |
-| `PromptTemplate` | `str, Enum` | `A`, `B`, `C`, `D` — template identifiers |
-| `ChoiceStatus` | `str, Enum` | `VALID`, `REFUSED`, `AMBIGUOUS` — response classification |
-| `ExperimentRecord` | `BaseModel` | Complete record for a single model call (18 fields) |
+**`ExperimentRecord` 字段：**
 
-**`ExperimentRecord` fields / 字段:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `record_id` | `str` | Unique ID (UUID hex, 12 chars) |
-| `experiment_phase` | `ExperimentPhase` | Phase1 or Phase2 |
-| `experiment_group` | `str` | Experiment group identifier (e.g. "1.1") |
-| `model_name` | `str` | Model name from config |
-| `model_version` | `str` | Model version (default "unknown") |
-| `temperature` | `float` | Sampling temperature |
-| `prompt_template` | `PromptTemplate` | Template used (A/B/C/D) |
-| `prompt_text` | `str` | Full rendered prompt text |
-| `num_stalls` | `int` | Total number of stalls |
-| `occupied_stalls` | `list[int]` | Occupied stall numbers (Phase 2) |
-| `conditions` | `dict` | Additional experiment conditions |
-| `raw_response` | `str` | Raw model response text |
-| `extracted_choice` | `int | None` | Parsed stall number (None if extraction failed) |
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `record_id` | `str` | 唯一标识（UUID hex，12 位） |
+| `experiment_phase` | `ExperimentPhase` | Phase1 或 Phase2 |
+| `experiment_group` | `str` | 实验分组标识（如 "1.1"） |
+| `model_name` | `str` | 模型名称（来自配置） |
+| `model_version` | `str` | 模型版本（默认 "unknown"） |
+| `temperature` | `float` | 采样温度 |
+| `prompt_template` | `PromptTemplate` | 使用的模板（A/B/C/D） |
+| `prompt_text` | `str` | 完整渲染后的提示词文本 |
+| `num_stalls` | `int` | 坑位总数 |
+| `occupied_stalls` | `list[int]` | 已占用的坑位编号（Phase 2 使用） |
+| `conditions` | `dict` | 附加实验条件 |
+| `raw_response` | `str` | 模型原始响应文本 |
+| `extracted_choice` | `int | None` | 解析出的坑位编号（提取失败为 None） |
 | `choice_status` | `ChoiceStatus` | VALID / REFUSED / AMBIGUOUS |
-| `reasoning_present` | `bool` | Whether structured reasoning was captured |
-| `extracted_reasoning` | `str` | Reasoning text from structured output |
-| `response_tokens` | `int` | Token count from API response |
-| `latency_ms` | `int` | Request latency in milliseconds |
-| `timestamp` | `datetime` | UTC timestamp of the call |
+| `reasoning_present` | `bool` | 是否捕获到结构化推理 |
+| `extracted_reasoning` | `str` | 结构化输出中的推理文本 |
+| `response_tokens` | `int` | API 响应的 token 数 |
+| `latency_ms` | `int` | 请求延迟（毫秒） |
+| `timestamp` | `datetime` | 调用的 UTC 时间戳 |
 
-### 3.2 `schema/` — LLM Response Schema / LLM 响应模式
+### 3.2 `schema/` — LLM 响应模式
 
-**Purpose:** Defines the structured output format that the LLM is asked to produce.
+定义 LLM 被要求产生的结构化输出格式。
 
-**Key exports:**
+- **`StallChoice(BaseModel)`** — 结构化响应模型：
+  - `chosen_stall: int` — 选择的坑位编号（通过 `[1, num_stalls]` 范围验证）
+  - `chain_of_thought: str` — 模型推理过程（最小长度 10）
+  - `confidence: float` — 信心程度 [0.0, 1.0]
+  - 包含 `validate_stall_range` 字段验证器，检查 `context["num_stalls"]` 范围
 
-- **`StallChoice(BaseModel)`** — The structured response model:
-  - `chosen_stall: int` — stall number chosen (validated against range `[1, num_stalls]`)
-  - `chain_of_thought: str` — model's reasoning (min length 10)
-  - `confidence: float` — confidence level [0.0, 1.0]
-  - Includes `validate_stall_range` field validator that checks against `context["num_stalls"]`
+- **`get_stallchoice_json_schema() -> dict`** — 返回 `StallChoice` 的 JSON Schema，用于 PLAIN_TEXT 回退时的系统提示
 
-- **`get_stallchoice_json_schema() -> dict`** — Returns the JSON Schema for `StallChoice`, used in system prompts for PLAIN_TEXT fallback
+### 3.3 `config/` — 配置加载
 
-### 3.3 `config/` — Configuration Loading / 配置加载
+从 YAML 文件加载并验证为类型化的 Pydantic 模型。
 
-**Purpose:** Loads and validates YAML configuration files into typed Pydantic models.
+**Pydantic 配置模型：**
 
-**Pydantic config models:**
+| 模型 | 来源 | 关键字段 |
+|------|------|----------|
+| `ModelConfig` | `configs/models.yaml` | `name`、`endpoint`、`api_key`、`version`、`timeout`、`max_retries`、`probe_message` |
+| `ExperimentConfig` | `configs/experiments/*.yaml` | `experiment_id`、`num_stalls`、`temperatures`、`templates`、`repetitions`、`conditions`、`occupied_stalls` |
+| `PromptTemplateConfig` | `configs/prompt_templates/*.yaml` | `templates: dict[str, str]`、`system_message_template` |
+| `ClassificationConfig` | `configs/classification.yaml` | `refusal_keywords`、`chinese_patterns`、`english_patterns`、`trailing_digit_pattern`、`general_digit_pattern`、`direction_reversal` |
+| `DirectionReversalPair` | （嵌套在 ClassificationConfig 中） | `source`、`target` |
 
-| Model | Source | Key fields |
-|-------|--------|------------|
-| `ModelConfig` | `configs/models.yaml` | `name`, `endpoint`, `api_key`, `version`, `timeout`, `max_retries`, `probe_message` |
-| `ExperimentConfig` | `configs/experiments/*.yaml` | `experiment_id`, `num_stalls`, `temperatures`, `templates`, `repetitions`, `conditions`, `occupied_stalls` |
-| `PromptTemplateConfig` | `configs/prompt_templates/*.yaml` | `templates: dict[str, str]`, `system_message_template` |
-| `ClassificationConfig` | `configs/classification.yaml` | `refusal_keywords`, `chinese_patterns`, `english_patterns`, `trailing_digit_pattern`, `general_digit_pattern`, `direction_reversal` |
-| `DirectionReversalPair` | (embedded in ClassificationConfig) | `source`, `target` |
+**加载函数：**
 
-**Loading functions:**
+| 函数 | 输入 | 输出 |
+|------|------|------|
+| `load_yaml(path)` | YAML 文件路径 | `dict` |
+| `load_model_config(path)` | models.yaml 路径 | `ModelConfig` |
+| `load_experiment_config(path)` | 实验配置 YAML 路径 | `ExperimentConfig` |
+| `load_prompt_templates(path)` | 模板 YAML 路径 | `PromptTemplateConfig` |
+| `load_classification_config(path)` | 分类配置 YAML 路径 | `ClassificationConfig` |
+| `discover_experiments(config_dir)` | 实验配置目录 | `list[ExperimentConfig]` |
 
-| Function | Input | Output |
-|----------|-------|--------|
-| `load_yaml(path)` | YAML file path | `dict` |
-| `load_model_config(path)` | models.yaml path | `ModelConfig` |
-| `load_experiment_config(path)` | experiment YAML path | `ExperimentConfig` |
-| `load_prompt_templates(path)` | template YAML path | `PromptTemplateConfig` |
-| `load_classification_config(path)` | classification YAML path | `ClassificationConfig` |
-| `discover_experiments(config_dir)` | experiments directory | `list[ExperimentConfig]` |
+`ClassificationConfig` 提供两个辅助方法：
+- `to_extraction_patterns() -> dict` — 转换为 `ExperimentRunner` 所需的格式
+- `to_reversal_pairs() -> list[dict]` — 转换为 `build_reverse_prompt()` 所需的格式
 
-`ClassificationConfig` provides two helper methods:
-- `to_extraction_patterns() -> dict` — converts to the format expected by `ExperimentRunner`
-- `to_reversal_pairs() -> list[dict]` — converts to the format expected by `build_reverse_prompt()`
+### 3.4 `prompt/` — 提示词构建
 
-### 3.4 `prompt/` — Prompt Builder / 提示词构建
+通过替换占位符渲染提示词模板，构建结构化输出的系统消息。
 
-**Purpose:** Renders prompt templates by substituting placeholders, and constructs system messages for structured output.
+- **`build_prompt(template_text, num_stalls, **kwargs) -> str`** — 替换模板中的 `{num_stalls}` 及其他占位符
 
-**Key functions:**
+- **`build_system_message(num_stalls, template=None) -> str`** — 返回结构化 JSON 输出的系统消息。使用传入的模板（通常从 `PromptTemplateConfig.system_message_template` 加载），或回退到内置默认模板。模板必须包含 `{num_stalls}` 占位符。
 
-- **`build_prompt(template_text, num_stalls, **kwargs) -> str`** — Substitutes `{num_stalls}` and any additional placeholders in the template string
+- **`build_reverse_prompt(template_text, num_stalls, reversal_pairs=None, **kwargs) -> str`** — 通过应用 `{"source": "...", "target": "..."}` 替换列表，构建方向反转的提示词。默认使用内置的中英文方向对。用于对称性实验 1.2。
 
-- **`build_system_message(num_stalls, template=None) -> str`** — Returns a system message for structured JSON output. Uses the provided template (typically loaded from `PromptTemplateConfig.system_message_template`) or falls back to a built-in default. The template must contain a `{num_stalls}` placeholder.
+### 3.5 `client/` — LLM 客户端
 
-- **`build_reverse_prompt(template_text, num_stalls, reversal_pairs=None, **kwargs) -> str`** — Creates a direction-reversed prompt by applying a list of `{"source": "...", "target": "..."}` replacements. Defaults to the built-in Chinese/English direction pairs. Used in symmetry experiment 1.2.
-
-### 3.5 `client/` — LLM Client / LLM 客户端
-
-**Purpose:** Communicates with the OpenAI-compatible API, with automatic capability detection and graceful fallback.
-
-**`LLMClient` class:**
+与 OpenAI 兼容 API 通信，支持自动能力探测和优雅降级。
 
 ```
 LLMClient(endpoint, model, api_key="", timeout=60, max_retries=2, probe_message="Say OK")
 ```
 
-**Initialization:** Lazy — the underlying `OpenAI` client is created on first use, not at construction time. All parameters default to sensible values but are typically loaded from `ModelConfig`.
+**初始化：** 延迟初始化 — 底层 `OpenAI` 客户端在首次使用时创建，而非构造时。所有参数有合理默认值，通常从 `ModelConfig` 加载。
 
-**API probing — `probe_api() -> str`:**
+**API 探测 — `probe_api() -> str`：**
 
-Tries three modes in order to determine what the API supports:
+按顺序尝试三种模式，确定 API 支持哪种：
 
-| Priority | Mode | Mechanism | When to use |
-|----------|------|-----------|-------------|
-| 1 | `TOOLS` | `instructor.Mode.TOOLS` (function calling) | OpenAI, most capable APIs |
-| 2 | `JSON_SCHEMA` | `instructor.Mode.JSON_SCHEMA` | APIs with JSON mode but no tools |
-| 3 | `PLAIN_TEXT` | Raw `OpenAI` client, no instructor | Minimal API support |
+| 优先级 | 模式 | 机制 | 适用场景 |
+|--------|------|------|----------|
+| 1 | `TOOLS` | `instructor.Mode.TOOLS`（函数调用） | OpenAI，能力最强的 API |
+| 2 | `JSON_SCHEMA` | `instructor.Mode.JSON_SCHEMA` | 支持 JSON 模式但不支持函数调用的 API |
+| 3 | `PLAIN_TEXT` | 原始 `OpenAI` 客户端，不用 instructor | 最小 API 支持 |
 
-**Query methods:**
+**查询方法：**
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `query_structured(prompt, system_message, temperature, num_stalls)` | `(StallChoice | None, str, int, int)` | Uses instructor if TOOLS/JSON_SCHEMA mode; falls back to `query_plain()` |
-| `query_plain(prompt, system_message, temperature)` | `(str, int, int)` | Direct OpenAI call, returns (raw_response, tokens, latency_ms) |
+| 方法 | 返回值 | 说明 |
+|------|--------|------|
+| `query_structured(prompt, system_message, temperature, num_stalls)` | `(StallChoice | None, str, int, int)` | TOOLS/JSON_SCHEMA 模式使用 instructor；回退到 `query_plain()` |
+| `query_plain(prompt, system_message, temperature)` | `(str, int, int)` | 直接 OpenAI 调用，返回 (原始响应, token 数, 延迟毫秒) |
 
-### 3.6 `recorder/` — JSONL Recorder / JSONL 记录器
+### 3.6 `recorder/` — JSONL 记录器
 
-**Purpose:** Persist experiment results as append-only JSONL (one JSON object per line).
-
-**`JSONLRecorder` class:**
+以追加写入的 JSONL 格式持久化实验结果（每行一个 JSON 对象）。
 
 ```
 JSONLRecorder(output_path: Path)
 ```
 
-| Method | Description |
-|--------|-------------|
-| `record(record: ExperimentRecord)` | Append one record as a JSON line |
-| `record_batch(records: list[ExperimentRecord])` | Append multiple records |
-| `read_all() -> list[ExperimentRecord]` | Read and parse all records |
-| `count() -> int` | Count lines without parsing |
-| `clear()` | Delete the output file |
+| 方法 | 说明 |
+|------|------|
+| `record(record: ExperimentRecord)` | 追加一条 JSON 记录 |
+| `record_batch(records: list[ExperimentRecord])` | 追加多条记录 |
+| `read_all() -> list[ExperimentRecord]` | 读取并解析所有记录 |
+| `count() -> int` | 统计行数（不解析内容） |
+| `clear()` | 删除输出文件 |
 
-The output directory is created automatically on initialization.
+输出目录在初始化时自动创建。
 
-### 3.7 `runner/` — Experiment Runner / 实验运行器
+### 3.7 `runner/` — 实验运行器
 
-**Purpose:** Orchestrates the full pipeline — parameter combination generation, prompt building, API calls, response classification, and recording.
-
-**`ExperimentRunner` class:**
+编排完整流水线 — 参数组合生成、提示词构建、API 调用、响应分类和记录。
 
 ```
 ExperimentRunner(client, recorder, model_config, refusal_keywords=None, extraction_patterns=None)
 ```
 
-**Parameters:**
-- `refusal_keywords` — list of refusal keyword strings (loaded from `ClassificationConfig.refusal_keywords`). Defaults to built-in Chinese/English keywords.
-- `extraction_patterns` — dict of regex pattern lists for text extraction (loaded via `ClassificationConfig.to_extraction_patterns()`). Defaults to built-in patterns.
+**参数：**
+- `refusal_keywords` — 拒绝关键词字符串列表（从 `ClassificationConfig.refusal_keywords` 加载）。默认使用内置的中英文关键词。
+- `extraction_patterns` — 文本提取的正则模式字典（通过 `ClassificationConfig.to_extraction_patterns()` 加载）。默认使用内置模式。
 
-**Public methods:**
+**公开方法：**
 
-- **`run_single(prompt, system_message, temperature, num_stalls, metadata) -> ExperimentRecord`** — Executes one API call, classifies the response, records the result
+- **`run_single(prompt, system_message, temperature, num_stalls, metadata) -> ExperimentRecord`** — 执行一次 API 调用，分类响应，记录结果
 
-- **`run_experiment(experiment_config, templates) -> list[ExperimentRecord]`** — Runs a full experiment:
-  1. Generates all combinations: `num_stalls x temperatures x templates x repetitions`
-  2. **Shuffles** the list randomly to avoid order effects
-  3. Executes each combination via `run_single()`
-  4. Returns all records
+- **`run_experiment(experiment_config, templates) -> list[ExperimentRecord]`** — 运行完整实验：
+  1. 生成所有参数组合：`num_stalls x temperatures x templates x repetitions`
+  2. **随机打乱** 以避免顺序效应
+  3. 依次通过 `run_single()` 执行每组参数
+  4. 返回所有记录
 
-**Response classification — `_classify_response()`:**
+**响应分类 — `_classify_response()`：**
 
-| Status | Condition |
-|--------|-----------|
-| `VALID` | `extracted_choice` is not None and in range `[1, num_stalls]` |
-| `REFUSED` | Raw response contains refusal patterns (e.g. "无法", "refuse", "cannot") |
-| `AMBIGUOUS` | No valid choice extracted and no refusal detected |
+| 状态 | 条件 |
+|------|------|
+| `VALID` | `extracted_choice` 不为 None 且在 `[1, num_stalls]` 范围内 |
+| `REFUSED` | 原始响应包含拒绝关键词（如 "无法"、"refuse"、"cannot"） |
+| `AMBIGUOUS` | 无法提取有效选择且未检测到拒绝 |
 
-**Text extraction — `_extract_choice_from_text()`:**
+**文本提取 — `_extract_choice_from_text()`：**
 
-When structured output fails (PLAIN_TEXT mode), extracts the stall number using a cascade of regex patterns:
+当结构化输出失败（PLAIN_TEXT 模式）时，通过正则模式级联提取坑位编号：
 
-1. Chinese patterns: `第(\d+)个`, `(\d+)号`, `选择.*?(\d+)`
-2. English patterns: `stall (\d+)`, `number (\d+)`
-3. Bare digit at end of response
-4. Last digit found in the response that falls within valid range
+1. 中文模式：`第(\d+)个`、`(\d+)号`、`选择.*?(\d+)`
+2. 英文模式：`stall (\d+)`、`number (\d+)`
+3. 响应末尾的裸数字
+4. 响应中最后一个在有效范围内的数字
 
 ---
 
-## 4. Configuration Guide / 配置指南
+## 4. 配置指南
 
-### 4.1 Model Configuration / 模型配置
+### 4.1 模型配置
 
-**File:** `configs/models.yaml`
+**文件：** `configs/models.yaml`
 
 ```yaml
 models:
   - name: glm-5.1
-    endpoint: http://localhost:3000/v1    # Base URL — SDK appends /chat/completions
-    api_key: ""                            # Optional, defaults to "unused"
-    version: "latest"                      # Optional, defaults to "unknown"
-    timeout: 60                            # API call timeout in seconds
-    max_retries: 2                         # Max retries for structured output
-    probe_message: "Say OK"                # Message used to probe API capabilities
+    endpoint: http://localhost:3000/v1    # 基址 — SDK 自动拼接 /chat/completions
+    api_key: ""                            # 可选，默认为 "unused"
+    version: "latest"                      # 可选，默认为 "unknown"
+    timeout: 60                            # API 调用超时（秒）
+    max_retries: 2                         # 结构化输出最大重试次数
+    probe_message: "Say OK"                # 探测 API 能力时使用的消息
 ```
 
-Note: `endpoint` is the base URL. The OpenAI SDK automatically appends `/chat/completions`.
+注意：`endpoint` 是基址 URL。OpenAI SDK 会自动拼接 `/chat/completions`。
 
-### 4.1.1 Classification Configuration / 分类配置
+### 4.1.1 分类配置
 
-**File:** `configs/classification.yaml`
+**文件：** `configs/classification.yaml`
 
-Controls response classification and text extraction behavior:
+控制响应分类和文本提取的行为：
 
 ```yaml
 refusal_keywords: ["无法", "不能", "拒绝", "refuse", "cannot", "won't", "I can't", "inappropriate"]
@@ -287,40 +275,40 @@ direction_reversal:
     target: "from right to left"
 ```
 
-All fields have sensible defaults — the file can be empty or missing.
+所有字段都有合理默认值 — 文件可以为空或不存在。
 
-### 4.2 Experiment Configuration / 实验配置
+### 4.2 实验配置
 
-**Directory:** `configs/experiments/`
+**目录：** `configs/experiments/`
 
-Each YAML file defines one experiment:
+每个 YAML 文件定义一个实验：
 
 ```yaml
-experiment_id: "1.1"                    # Unique identifier
-experiment_group: "1.1"                 # Grouping key
-phase: "Phase1"                         # ExperimentPhase enum value
-description: "Baseline choice"          # Human-readable description
-num_stalls: [3, 5, 7, 10]              # List of stall counts to test
-temperatures: [0.0, 0.7]               # Sampling temperatures
-templates: ["A", "B", "C"]             # Prompt template keys to use
-repetitions: 30                         # Repetitions per parameter combo
-conditions: {}                          # Additional conditions metadata
-occupied_stalls: []                     # Pre-occupied stalls (Phase 2)
+experiment_id: "1.1"                    # 唯一标识
+experiment_group: "1.1"                 # 分组键
+phase: "Phase1"                         # ExperimentPhase 枚举值
+description: "基准选择"                  # 可读描述
+num_stalls: [3, 5, 7, 10]              # 要测试的坑位数量列表
+temperatures: [0.0, 0.7]               # 采样温度
+templates: ["A", "B", "C"]             # 使用的提示词模板键
+repetitions: 30                         # 每组参数的重复次数
+conditions: {}                          # 附加实验条件
+occupied_stalls: []                     # 已占用的坑位（Phase 2 使用）
 ```
 
-**Total calls per experiment:** `len(num_stalls) * len(temperatures) * len(templates) * repetitions`
+**每个实验的总调用数：** `len(num_stalls) * len(temperatures) * len(templates) * repetitions`
 
-**Current experiments / 当前实验:**
+**当前实验：**
 
-| ID | Description | num_stalls | Total combos |
-|----|-------------|------------|-------------|
-| 1.1 | Baseline — all stalls empty | [3, 5, 7, 10] | 4 x 2 x 3 x 30 = 720 calls |
-| 1.2 | Symmetry — direction reversal | [5] | 1 x 2 x 3 x 30 = 180 calls |
-| 1.3 | Option count effect | [3, 5, 7, 10, 15, 20] | 6 x 2 x 3 x 30 = 1,080 calls |
+| ID | 说明 | num_stalls | 总调用数 |
+|----|------|------------|----------|
+| 1.1 | 基准选择 — 全部空坑位 | [3, 5, 7, 10] | 4 x 2 x 3 x 30 = 720 次 |
+| 1.2 | 对称性 — 方向反转 | [5] | 1 x 2 x 3 x 30 = 180 次 |
+| 1.3 | 选项数量效应 | [3, 5, 7, 10, 15, 20] | 6 x 2 x 3 x 30 = 1,080 次 |
 
-### 4.3 Prompt Templates / 提示词模板
+### 4.3 提示词模板
 
-**File:** `configs/prompt_templates/phase1.yaml`
+**文件：** `configs/prompt_templates/phase1.yaml`
 
 ```yaml
 templates:
@@ -330,17 +318,17 @@ templates:
   D: "面前有一排{num_stalls}个坑位，全部空闲，干净程度相同，设施完全一样，除位置外没有其他差别。你可以选最左边的、最右边的..."
 ```
 
-- `{num_stalls}` is the placeholder, replaced by `build_prompt()` at runtime
-- All templates emphasize that conditions are identical except position
-- Template A is the most minimal; B and C add framing context; D explicitly names options
+- `{num_stalls}` 是占位符，运行时由 `build_prompt()` 替换
+- 所有模板都强调"除位置外条件完全相同"
+- 模板 A 最精简；B 和 C 增加场景描述；D 显式列举选项
 
 ---
 
-## 5. Data Format / 数据格式
+## 5. 数据格式
 
-### JSONL Record Example / JSONL 记录示例
+### JSONL 记录示例
 
-Each line in the output JSONL file is a complete `ExperimentRecord`:
+输出 JSONL 文件中每一行是一条完整的 `ExperimentRecord`：
 
 ```json
 {
@@ -368,66 +356,66 @@ Each line in the output JSONL file is a complete `ExperimentRecord`:
 
 ---
 
-## 6. Key Design Decisions / 关键设计决策
+## 6. 关键设计决策
 
-### 6.1 Three-Tier Structured Output Fallback / 三级结构化输出回退
+### 6.1 三级结构化输出回退
 
-**Decision:** `LLMClient.probe_api()` tries TOOLS, then JSON_SCHEMA, then falls back to PLAIN_TEXT. Refusal keywords, text extraction regex patterns, and direction-reversal strings are all configurable via `configs/classification.yaml`.
+**决策：** `LLMClient.probe_api()` 依次尝试 TOOLS、JSON_SCHEMA，最终回退到 PLAIN_TEXT。拒绝关键词、文本提取正则模式、方向反转字符串全部可通过 `configs/classification.yaml` 配置。
 
-**Why:** Self-hosted or local model APIs (e.g. vLLM, Ollama, custom endpoints) often lack full OpenAI function calling support. Rather than failing, the client gracefully degrades. In PLAIN_TEXT mode, the runner uses regex-based text extraction (`_extract_choice_from_text()`) to parse the stall number from free-form responses. Externalizing these patterns to config allows researchers to adapt classification for new languages or model behaviors without code changes.
+**原因：** 自托管或本地模型 API（如 vLLM、Ollama、自定义端点）通常不支持完整的 OpenAI 函数调用。客户端优雅降级而非直接失败。在 PLAIN_TEXT 模式下，运行器通过基于正则的文本提取（`_extract_choice_from_text()`）从自由格式响应中解析坑位编号。将这些模式外化到配置文件，研究人员可以针对新语言或模型行为调整分类规则，无需修改代码。
 
-### 6.2 No litellm / 不使用 litellm
+### 6.2 不使用 litellm
 
-**Decision:** Use `instructor` directly with the `openai` SDK, not `litellm`.
+**决策：** 直接使用 `instructor` + `openai` SDK，不引入 `litellm`。
 
-**Why:** Stall Mate targets a single model endpoint per experiment run. `litellm` adds complexity for multi-provider routing that is unnecessary here. `instructor` provides exactly the structured output extraction we need with minimal dependencies.
+**原因：** Stall Mate 每次实验运行只针对一个模型端点。`litellm` 的多提供商路由能力在此场景下是多余的。`instructor` 以最小依赖提供我们所需的结构化输出提取。
 
-### 6.3 No Async / 不使用异步
+### 6.3 不使用异步
 
-**Decision:** All API calls are sequential (synchronous).
+**决策：** 所有 API 调用都是顺序执行的（同步）。
 
-**Why:** The full Phase 1 experiment requires ~1,980 calls at ~15-30s each (~8-16 hours). This is a batch job, not a latency-sensitive service. Sequential execution avoids concurrency bugs, simplifies debugging, and ensures deterministic recording order. Async can be added later if needed.
+**原因：** 完整 Phase 1 实验需要约 1,980 次调用，每次约 15-30 秒（总计约 8-16 小时）。这是批处理任务，不是延迟敏感的服务。顺序执行避免并发 bug、简化调试、保证记录顺序确定性。需要时可后续添加异步支持。
 
-### 6.4 Config-Driven / 配置驱动
+### 6.4 配置驱动
 
-**Decision:** All experiment parameters, model settings, prompt templates, and classification patterns live in YAML files. No hardcoded values in Python.
+**决策：** 所有实验参数、模型设置、提示词模板和分类模式都存放在 YAML 文件中。Python 代码中无硬编码值。
 
-**Why:** Separates experiment design from implementation. Researchers can define new experiments, tune classification thresholds, or change system prompts by editing YAML files without touching code. Reduces risk of accidental code changes affecting experiment conditions.
+**原因：** 将实验设计与实现分离。研究人员可以通过编辑 YAML 文件定义新实验、调整分类阈值或修改系统提示词，无需触碰代码。降低意外代码修改影响实验条件的风险。
 
-### 6.5 JSONL Output / JSONL 输出
+### 6.5 JSONL 输出
 
-**Decision:** One `ExperimentRecord` per line, written via stdlib `json`.
+**决策：** 每行一条 `ExperimentRecord`，通过标准库 `json` 写入。
 
-**Why:** JSONL is append-only (safe for interrupted runs), line-delimited (easy to process with standard tools: `jq`, `wc -l`, `grep`), and requires no additional libraries. Each line is self-contained and independently parseable.
+**原因：** JSONL 支持追加写入（中断运行也安全）、按行分隔（易于用 `jq`、`wc -l`、`grep` 等标准工具处理）、不需要额外库。每行自包含，可独立解析。
 
-### 6.6 Random Shuffle / 随机打乱
+### 6.6 随机打乱
 
-**Decision:** `run_experiment()` generates all parameter combinations and shuffles them before execution.
+**决策：** `run_experiment()` 生成所有参数组合后随机打乱再执行。
 
-**Why:** Sequential execution of identical parameters could interact with API-side caching or rate limiting. Shuffling distributes parameter conditions across the time axis, reducing temporal confounds.
+**原因：** 顺序执行相同参数可能与 API 端的缓存或限流产生交互。打乱将不同参数条件分散到时间轴上，减少时间混杂因素。
 
-### 6.7 API Endpoint as Base URL / API 端点为基址
+### 6.7 API 端点使用基址
 
-**Decision:** `configs/models.yaml` stores the base URL (e.g. `http://localhost:3000/v1`), not the full chat completions path.
+**决策：** `configs/models.yaml` 存储基址 URL（如 `http://localhost:3000/v1`），而非完整的 chat completions 路径。
 
-**Why:** The OpenAI Python SDK automatically appends `/chat/completions` to the base URL. Storing only the base URL avoids double-path bugs (`/v1/chat/completions/chat/completions`).
+**原因：** OpenAI Python SDK 自动在基址后拼接 `/chat/completions`。只存储基址避免双重路径问题（`/v1/chat/completions/chat/completions`）。
 
 ---
 
-## 7. Extension Guide / 扩展指南
+## 7. 扩展指南
 
-### 7.1 Add a New Prompt Template / 添加新提示词模板
+### 7.1 添加新提示词模板
 
-1. Add the template to `configs/prompt_templates/phase1.yaml`:
+1. 在 `configs/prompt_templates/phase1.yaml` 中添加模板：
    ```yaml
    E: "你的新模板，包含{num_stalls}个坑位..."
    ```
-2. Add `"E"` to the `PromptTemplate` enum in `src/stall_mate/types/record.py`
-3. Reference template `"E"` in experiment YAML `templates` field
+2. 在 `src/stall_mate/types/record.py` 的 `PromptTemplate` 枚举中添加 `"E"`
+3. 在实验 YAML 的 `templates` 字段中引用模板 `"E"`
 
-### 7.2 Add a New Experiment / 添加新实验
+### 7.2 添加新实验
 
-Create a new YAML file in `configs/experiments/`:
+在 `configs/experiments/` 目录下创建新 YAML 文件：
 ```yaml
 experiment_id: "1.4"
 experiment_group: "1.4"
@@ -441,11 +429,11 @@ conditions: {}
 occupied_stalls: []
 ```
 
-Use `discover_experiments()` to auto-load all experiment configs from the directory.
+使用 `discover_experiments()` 自动加载目录下所有实验配置。
 
-### 7.3 Add a New Model / 添加新模型
+### 7.3 添加新模型
 
-Add to `configs/models.yaml`:
+在 `configs/models.yaml` 中添加：
 ```yaml
 models:
   - name: glm-5.1
@@ -463,75 +451,75 @@ models:
     max_retries: 3
 ```
 
-Currently `load_model_config()` loads the first entry. For multi-model support, modify the loader to accept a model name parameter.
+目前 `load_model_config()` 加载第一条记录。如需多模型支持，修改加载器以接受模型名称参数。
 
-### 7.4 Customize Classification / 自定义分类
+### 7.4 自定义分类
 
-Edit `configs/classification.yaml` to change:
-- **Refusal keywords** — add/remove keywords for new languages or model behaviors
-- **Text extraction patterns** — add regex patterns for new response formats
-- **Direction reversal pairs** — add new language pairs for symmetry tests
+编辑 `configs/classification.yaml` 来修改：
+- **拒绝关键词** — 为新语言或模型行为增删关键词
+- **文本提取模式** — 为新的响应格式添加正则模式
+- **方向反转对** — 为对称性测试添加新语言对
 
-All fields have defaults; the file can be partially filled.
+所有字段都有默认值；文件可以部分填写。
 
-### 7.5 Extend to Phase 2 / 扩展到第二阶段
+### 7.5 扩展到 Phase 2
 
-Phase 2 introduces occupied stalls (some stalls are taken, the model must choose among remaining ones):
+Phase 2 引入已占用坑位（部分坑位有人，模型必须在剩余坑位中选择）：
 
-1. Add `PHASE2 = "Phase2"` to the `ExperimentPhase` enum (already exists)
-2. Create experiment configs with non-empty `occupied_stalls`:
+1. `ExperimentPhase` 枚举中已有 `PHASE2 = "Phase2"`（无需修改）
+2. 创建带有非空 `occupied_stalls` 的实验配置：
    ```yaml
-   occupied_stalls: [1, 3, 5]  # These stalls are already occupied
+   occupied_stalls: [1, 3, 5]  # 这些坑位已被占用
    ```
-3. Update `build_prompt()` to incorporate occupied stall information into the prompt text
-4. The `ExperimentRunner` and `ExperimentRecord` already support `occupied_stalls` — no changes needed
+3. 更新 `build_prompt()` 在提示词文本中融入已占用坑位信息
+4. `ExperimentRunner` 和 `ExperimentRecord` 已支持 `occupied_stalls` — 无需修改
 
-### 7.6 Add Async Support / 添加异步支持
+### 7.6 添加异步支持
 
-Future optimization for large-scale experiments:
+大规模实验的未来优化方向：
 
-1. Convert `LLMClient.query_structured()` and `query_plain()` to `async`
-2. Use `asyncio.Semaphore` to limit concurrent requests
-3. Replace `random.shuffle()` with `asyncio.Queue` for concurrent consumption
-4. `JSONLRecorder.record()` needs a lock for concurrent writes
-5. Keep the sequential API as default; async as opt-in
+1. 将 `LLMClient.query_structured()` 和 `query_plain()` 改为 `async`
+2. 使用 `asyncio.Semaphore` 限制并发请求数
+3. 用 `asyncio.Queue` 替代 `random.shuffle()` 实现并发消费
+4. `JSONLRecorder.record()` 需要加锁以支持并发写入
+5. 保持同步 API 为默认，异步作为可选
 
 ---
 
-## 8. Verification / 验证
+## 8. 验证
 
-### Functional Verification Script / 功能验证脚本
+### 功能验证脚本
 
-**File:** `scripts/verify_10calls.py`
+**文件：** `scripts/verify_10calls.py`
 
-Runs 10 API calls across diverse parameter combinations to verify the full pipeline:
+运行 10 次 API 调用，覆盖不同参数组合，验证完整流水线：
 
-| Group | Parameters | Purpose |
-|-------|-----------|---------|
-| 1 (3 calls) | N=5, T=0.0, templates A/B/C | Template variation at deterministic temperature |
-| 2 (3 calls) | N=3/7/10, T=0.7, template A | Stall count variation |
-| 3 (2 calls) | N=5, T=0.0, template D | Consistency check — same params, two calls |
-| 4 (2 calls) | N=15/20, T=0.7, templates B/C | Edge cases — large stall counts |
+| 组别 | 参数 | 目的 |
+|------|------|------|
+| 1（3 次） | N=5, T=0.0, 模板 A/B/C | 确定性温度下的模板变化 |
+| 2（3 次） | N=3/7/10, T=0.7, 模板 A | 坑位数量变化 |
+| 3（2 次） | N=5, T=0.0, 模板 D | 一致性检查 — 相同参数调用两次 |
+| 4（2 次） | N=15/20, T=0.7, 模板 B/C | 边界情况 — 大坑位数 |
 
-**Verification steps:**
-1. Loads config from `configs/`
-2. Initializes `LLMClient`, `JSONLRecorder`, `ExperimentRunner`
-3. Executes 10 calls, prints progress and results
-4. Reads back the JSONL file and verifies: record count matches, all required fields present
-5. Exit code 0 = pass, 1 = fail
+**验证步骤：**
+1. 从 `configs/` 加载配置
+2. 初始化 `LLMClient`、`JSONLRecorder`、`ExperimentRunner`
+3. 执行 10 次调用，打印进度和结果
+4. 回读 JSONL 文件并验证：记录数匹配、所有必填字段存在
+5. 退出码 0 = 通过，1 = 失败
 
-**Run:**
+**运行：**
 ```bash
 uv run python scripts/verify_10calls.py
 ```
 
-Note: Each call takes ~15-30 seconds. Total runtime ~3-5 minutes.
+注意：每次调用约 15-30 秒。总运行时间约 3-5 分钟。
 
-### Unit Tests / 单元测试
+### 单元测试
 
-**Run:**
+**运行：**
 ```bash
 uv run pytest
 ```
 
-74 tests covering all modules. All tests use mocks — no real API calls are made during testing. Test files are in `tests/` and mirror the source structure.
+85 个测试覆盖所有模块。所有测试使用 mock — 测试期间不发起真实 API 调用。测试文件位于 `tests/` 目录，结构与源代码对应。
