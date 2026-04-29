@@ -30,11 +30,18 @@ class ConditionGroup:
 def load_experiment_data(data_dir: Path) -> dict[str, list[ExperimentRecord]]:
     data_dir = Path(data_dir)
     result: dict[str, list[ExperimentRecord]] = {}
-    for path in sorted(data_dir.glob("phase1_*.jsonl")):
-        experiment_id = path.stem.replace("phase1_", "")
+    for path in sorted(data_dir.glob("phase*.jsonl")):
+        stem = path.stem
+        if stem.startswith("phase1_"):
+            experiment_id = stem.replace("phase1_", "")
+        elif stem.startswith("phase2"):
+            experiment_id = "2"
+        else:
+            experiment_id = stem
         recorder = JSONLRecorder(path)
         records = recorder.read_all()
-        result[experiment_id] = records
+        if records:
+            result[experiment_id] = records
     return result
 
 
