@@ -1,0 +1,14 @@
+# 条件 C：时间压力（Time Pressure）
+# 非常着急
+
+experiment_id: "2.C1"
+experiment_group: "2.C1"
+phase: "Phase2"
+description: "时间压力 C1：非常着急 / Time Pressure C1: Very urgent"
+num_stalls: [5]
+temperatures: [0.0]
+templates: ["A", "B", "C"]
+repetitions: 30
+occupied_stalls: []
+conditions:
+  time_pressure: "你现在非常着急。"

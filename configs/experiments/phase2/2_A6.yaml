@@ -1,0 +1,15 @@
+# 条件 A：占用状态（Occupancy）
+# 坑位1、2、4、5被占用，仅剩3
+
+experiment_id: "2.A6"
+experiment_group: "2.A6"
+phase: "Phase2"
+description: "占用状态 A6：坑位1、2、4、5被占用 / Occupancy A6: Stalls 1,2,4,5 occupied"
+num_stalls: [5]
+temperatures: [0.0]
+templates: ["A", "B", "C"]
+repetitions: 30
+occupied_stalls: [1, 2, 4, 5]
+conditions:
+  occupied: [1, 2, 4, 5]
+  conditions_description: "其中第1、2、4、5号坑位有人正在使用，仅剩第3号空闲。"

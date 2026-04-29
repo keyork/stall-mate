@@ -1,0 +1,14 @@
+# 条件 D：社交情境（Social Context）
+# 坑位2有人且在打电话
+
+experiment_id: "2.D2"
+experiment_group: "2.D2"
+phase: "Phase2"
+description: "社交情境 D2：坑位2有人打电话 / Social D2: Stall 2 occupant on phone"
+num_stalls: [5]
+temperatures: [0.0]
+templates: ["A", "B", "C"]
+repetitions: 30
+occupied_stalls: [2]
+conditions:
+  social: "第2号坑位有人正在使用，而且在打电话。"

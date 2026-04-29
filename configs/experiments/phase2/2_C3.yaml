@@ -1,0 +1,14 @@
+# 条件 C：时间压力（Time Pressure）
+# 有点急但能忍
+
+experiment_id: "2.C3"
+experiment_group: "2.C3"
+phase: "Phase2"
+description: "时间压力 C3：有点急 / Time Pressure C3: Somewhat urgent"
+num_stalls: [5]
+temperatures: [0.0]
+templates: ["A", "B", "C"]
+repetitions: 30
+occupied_stalls: []
+conditions:
+  time_pressure: "你有点急但还能忍一下。"

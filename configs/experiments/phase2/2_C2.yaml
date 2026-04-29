@@ -1,0 +1,14 @@
+# 条件 C：时间压力（Time Pressure）
+# 不赶时间
+
+experiment_id: "2.C2"
+experiment_group: "2.C2"
+phase: "Phase2"
+description: "时间压力 C2：不赶时间 / Time Pressure C2: No rush"
+num_stalls: [5]
+temperatures: [0.0]
+templates: ["A", "B", "C"]
+repetitions: 30
+occupied_stalls: []
+conditions:
+  time_pressure: "你不赶时间，可以慢慢选。"

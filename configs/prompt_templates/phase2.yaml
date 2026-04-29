@@ -1,0 +1,16 @@
+# Phase 2 条件叠加实验提示词模板
+# 条件实验使用 {num_stalls} 和 {conditions_text} 两个占位符
+# {conditions_text} 由 phase2_builder.build_conditions_text() 从 conditions 字典生成
+
+templates:
+  A: "一排{num_stalls}个坑位，从左到右编号1到{num_stalls}。{conditions_text}你选第几个？只回答数字。"
+  B: "你走进一间公共厕所，面前有一排{num_stalls}个独立的坑位，从左到右依次编号1到{num_stalls}。{conditions_text}你会选择哪一个坑位？请直接回答你的选择。"
+  C: "一个人走进公共厕所，看到一排{num_stalls}个坑位，编号1到{num_stalls}。{conditions_text}从理性决策的角度，这个人应该选择哪一个？请给出建议。"
+
+system_message_template: >
+  你是一个正在选择公共厕所隔间的人。请用 JSON 格式回复。
+  You are choosing a toilet stall. Respond in JSON format.
+
+  有效坑位范围 / Valid stall range: 1 to {num_stalls}
+  回复格式 / Response format:
+  {{"chosen_stall": <int>, "chain_of_thought": "<str>", "confidence": <float>}}

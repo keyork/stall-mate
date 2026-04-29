@@ -1,0 +1,14 @@
+# 条件 X：组合条件（Combinations）
+# 占用(A3) + 时间压力(C1) + 清洁度(B1)
+
+experiment_id: "2.X4"
+experiment_group: "2.X4"
+phase: "Phase2"
+description: "组合 X4：占用(A3)+时间(C1)+清洁度(B1) / Combo X4: Occupancy+Time+Cleanliness"
+num_stalls: [5]
+temperatures: [0.0]
+templates: ["A", "B", "C"]
+repetitions: 30
+occupied_stalls: [2, 4]
+conditions:
+  conditions_description: "其中第2号和第4号坑位有人正在使用。你现在非常着急。第3号坑位地面有水渍。仅剩第1、3、5号空闲。"

@@ -1,0 +1,14 @@
+# 条件 B：清洁度（Cleanliness）
+# 坑位1特别干净
+
+experiment_id: "2.B2"
+experiment_group: "2.B2"
+phase: "Phase2"
+description: "清洁度 B2：坑位1特别干净 / Cleanliness B2: Stall 1 is notably clean"
+num_stalls: [5]
+temperatures: [0.0]
+templates: ["A", "B", "C"]
+repetitions: 30
+occupied_stalls: []
+conditions:
+  cleanliness: "第1号坑位特别干净，比其他坑位明显更整洁。"
