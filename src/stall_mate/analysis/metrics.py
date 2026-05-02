@@ -9,6 +9,7 @@ from scipy.spatial.distance import jensenshannon
 
 
 def mcr(choices: list[int]) -> float:
+    """计算众数一致性率 | Compute Mode Consistency Rate (max frequency / total)."""
     if not choices:
         return 0.0
     freq = Counter(choices)
@@ -17,6 +18,7 @@ def mcr(choices: list[int]) -> float:
 
 
 def choice_entropy(choices: list[int], num_stalls: int) -> float:
+    """计算选择分布的香农熵（比特） | Compute Shannon entropy of the choice distribution in bits."""
     if not choices or num_stalls <= 0:
         return 0.0
     counts = np.zeros(num_stalls, dtype=np.float64)
@@ -32,6 +34,7 @@ def choice_entropy(choices: list[int], num_stalls: int) -> float:
 
 
 def normalized_entropy(choices: list[int], num_stalls: int) -> float:
+    """计算归一化熵（0~1） | Compute normalized entropy (entropy / log2(N))."""
     if num_stalls <= 1:
         return 0.0
     h = choice_entropy(choices, num_stalls)
@@ -40,6 +43,7 @@ def normalized_entropy(choices: list[int], num_stalls: int) -> float:
 
 
 def jsd_between_distributions(dist_a: np.ndarray, dist_b: np.ndarray) -> float:
+    """计算两个分布之间的 Jensen-Shannon 散度 | Compute Jensen-Shannon divergence between two distributions."""
     prob_a = dist_a / dist_a.sum() if dist_a.sum() > 0 else dist_a
     prob_b = dist_b / dist_b.sum() if dist_b.sum() > 0 else dist_b
     js_dist = jensenshannon(prob_a, prob_b, base=2)
@@ -47,6 +51,7 @@ def jsd_between_distributions(dist_a: np.ndarray, dist_b: np.ndarray) -> float:
 
 
 def chi2_uniform_test(choices: list[int], num_stalls: int) -> tuple[float, float]:
+    """卡方均匀性检验 | Chi-squared goodness-of-fit test against uniform distribution."""
     if not choices or num_stalls <= 1:
         return (0.0, 1.0)
     counts = np.zeros(num_stalls, dtype=np.float64)
@@ -57,12 +62,15 @@ def chi2_uniform_test(choices: list[int], num_stalls: int) -> tuple[float, float
     if len(nonzero_bins) <= 1:
         return (0.0, 1.0)
     result = stats.chisquare(counts)
-    return (float(result.statistic), float(result.pvalue))
+    statistic: float = float(result.statistic)  # type: ignore[union-attr]
+    pvalue: float = float(result.pvalue)  # type: ignore[union-attr]
+    return (statistic, pvalue)
 
 
 def chi2_independence_test(
     choices_a: list[int], choices_b: list[int], num_stalls: int
 ) -> tuple[float, float]:
+    """卡方独立性检验（两组选择是否来自同一分布） | Chi-squared independence test between two choice groups."""
     if not choices_a or not choices_b or num_stalls <= 1:
         return (0.0, 1.0)
     counts_a = np.zeros(num_stalls, dtype=np.float64)
@@ -79,10 +87,13 @@ def chi2_independence_test(
         return (0.0, 1.0)
     table = table[:, nonzero_cols]
     result = stats.chi2_contingency(table, correction=False)
-    return (float(result.statistic), float(result.pvalue))
+    statistic: float = float(result.statistic)  # type: ignore[union-attr]
+    pvalue: float = float(result.pvalue)  # type: ignore[union-attr]
+    return (statistic, pvalue)
 
 
 def choice_frequencies(choices: list[int], num_stalls: int) -> dict[int, float]:
+    """计算每个坑位的选择频率 | Compute choice frequency for each stall position."""
     if not choices:
         return {i: 0.0 for i in range(1, num_stalls + 1)}
     freq = Counter(choices)
@@ -91,6 +102,7 @@ def choice_frequencies(choices: list[int], num_stalls: int) -> dict[int, float]:
 
 
 def endpoint_preference(choices: list[int], num_stalls: int) -> float:
+    """计算选择端点坑位（首尾）的比例 | Compute proportion of choices at endpoint stalls (first or last)."""
     if not choices:
         return 0.0
     endpoints = {1, num_stalls}
@@ -99,6 +111,7 @@ def endpoint_preference(choices: list[int], num_stalls: int) -> float:
 
 
 def middle_preference(choices: list[int], num_stalls: int) -> float:
+    """计算选择中间坑位的比例 | Compute proportion of choices at middle stalls."""
     if not choices or num_stalls < 3:
         return 0.0
     mid = num_stalls // 2
@@ -108,6 +121,7 @@ def middle_preference(choices: list[int], num_stalls: int) -> float:
 
 
 def relative_position(choices: list[int], num_stalls: int) -> list[float]:
+    """将选择映射到 [0, 1] 相对位置 | Map choices to relative positions in [0, 1]."""
     if num_stalls <= 1:
         return [0.0] * len(choices)
     return [(c - 1) / (num_stalls - 1) for c in choices]

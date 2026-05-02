@@ -1,4 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
+"""
+分析报告生成器 | Analysis report generator.
+
+生成 Phase 1 分析报告（控制台 + Markdown + 可视化图表）。
+Generates Phase 1 analysis reports (console + Markdown + visualizations).
+"""
 from __future__ import annotations
 
 import statistics
@@ -51,27 +57,35 @@ class MarkdownBuilder:
         self._lines: list[str] = []
 
     def h1(self, text: str) -> None:
+        """追加一级标题 | Append an H1 heading."""
         self._lines.append(f"# {text}\n")
 
     def h2(self, text: str) -> None:
+        """追加二级标题 | Append an H2 heading."""
         self._lines.append(f"\n## {text}\n")
 
     def h3(self, text: str) -> None:
+        """追加三级标题 | Append an H3 heading."""
         self._lines.append(f"\n### {text}\n")
 
     def p(self, text: str) -> None:
+        """追加段落文本 | Append a paragraph."""
         self._lines.append(f"{text}\n")
 
     def blockquote(self, text: str) -> None:
+        """追加引用块 | Append a blockquote."""
         self._lines.append(f"> {text}\n")
 
     def hr(self) -> None:
+        """追加水平分隔线 | Append a horizontal rule."""
         self._lines.append("\n---\n")
 
     def blank(self) -> None:
+        """追加空行 | Append a blank line."""
         self._lines.append("")
 
     def table(self, headers: list[str], rows: list[list[str]]) -> None:
+        """追加 Markdown 表格 | Append a Markdown table with headers and rows."""
         header_line = "| " + " | ".join(headers) + " |"
         sep_line = "|" + "|".join(["------" for _ in headers]) + "|"
         self._lines.append(header_line)
@@ -81,15 +95,18 @@ class MarkdownBuilder:
         self._lines.append("")
 
     def ol(self, items: list[str]) -> None:
+        """追加有序列表 | Append an ordered list."""
         for i, item in enumerate(items, 1):
             self._lines.append(f"{i}. {item}")
         self._lines.append("")
 
     def build(self) -> str:
+        """构建并返回完整 Markdown 字符串 | Build and return the complete Markdown string."""
         return "\n".join(self._lines)
 
 
 def _compute_group_metrics(group: ConditionGroup) -> dict:
+    """计算单组的全量指标 | Compute all metrics for a single condition group."""
     ch = group.choices
     ns = group.num_stalls
     freqs = choice_frequencies(ch, ns)
@@ -115,6 +132,7 @@ def _compute_group_metrics(group: ConditionGroup) -> dict:
 
 
 def _compute_cross_template_jsd(groups: list[ConditionGroup]) -> list[dict]:
+    """计算跨模板 Jensen-Shannon 散度 | Compute cross-template Jensen-Shannon divergence."""
     nt_map: dict[tuple, dict[str, ConditionGroup]] = defaultdict(dict)
     for g in groups:
         nt_map[(g.experiment_group, g.num_stalls, g.temperature)][g.template] = g
@@ -139,6 +157,7 @@ def _compute_cross_template_jsd(groups: list[ConditionGroup]) -> list[dict]:
 
 
 def _compute_chi2_independence(groups: list[ConditionGroup]) -> list[dict]:
+    """计算跨模板卡方独立性检验 | Compute cross-template chi-squared independence test."""
     nt_map: dict[tuple, dict[str, ConditionGroup]] = defaultdict(dict)
     for g in groups:
         nt_map[(g.experiment_group, g.num_stalls, g.temperature)][g.template] = g
@@ -165,6 +184,7 @@ def _compute_chi2_independence(groups: list[ConditionGroup]) -> list[dict]:
 
 
 def _print_metrics_table_rich(console: Console, metrics_list: list[dict]) -> None:
+    """用 Rich 打印核心指标表格 | Print core metrics table using Rich."""
     table = Table(title="核心指标 | Core Metrics", show_lines=True)
     table.add_column("条件 | Condition", style="cyan", max_width=40)
     table.add_column("n", justify="right")
@@ -197,6 +217,7 @@ def _print_metrics_table_rich(console: Console, metrics_list: list[dict]) -> Non
 
 
 def _print_jsd_table_rich(console: Console, jsd_results: list[dict]) -> None:
+    """用 Rich 打印 JSD 表格 | Print JSD table using Rich."""
     if not jsd_results:
         console.print("[dim]No cross-template pairs to compare.[/dim]")
         return
@@ -210,6 +231,7 @@ def _print_jsd_table_rich(console: Console, jsd_results: list[dict]) -> None:
 
 
 def _print_chi2_independence_rich(console: Console, results: list[dict]) -> None:
+    """用 Rich 打印卡方独立性检验表格 | Print chi-squared independence test table using Rich."""
     if not results:
         console.print("[dim]No pairs to test.[/dim]")
         return
@@ -232,6 +254,7 @@ def _print_chi2_independence_rich(console: Console, results: list[dict]) -> None
 
 
 def _write_metrics_table_md(md: MarkdownBuilder, metrics_list: list[dict]) -> None:
+    """向 Markdown 写入指标表格 | Write metrics table to Markdown."""
     headers = ["条件", "n", "MCR", "H(bits)", "H_norm", "端点偏好", "中间偏好", "均值位置", "众数", "χ²", "p"]
     rows = []
     for m in metrics_list:
@@ -253,6 +276,7 @@ def _write_metrics_table_md(md: MarkdownBuilder, metrics_list: list[dict]) -> No
 
 
 def _write_jsd_table_md(md: MarkdownBuilder, jsd_results: list[dict]) -> None:
+    """向 Markdown 写入 JSD 表格 | Write JSD table to Markdown."""
     if not jsd_results:
         md.p("*No cross-template pairs to compare.*")
         return
@@ -262,6 +286,7 @@ def _write_jsd_table_md(md: MarkdownBuilder, jsd_results: list[dict]) -> None:
 
 
 def _write_chi2_table_md(md: MarkdownBuilder, results: list[dict]) -> None:
+    """向 Markdown 写入卡方表格 | Write chi-squared table to Markdown."""
     if not results:
         md.p("*No pairs to test.*")
         return
@@ -285,6 +310,7 @@ def _write_key_findings(
     all_jsd: list[dict],
     all_chi2: list[dict],
 ) -> None:
+    """生成关键发现段落 | Generate key findings section."""
     md.h2("关键发现 | Key Findings")
 
     findings: list[str] = []
@@ -365,6 +391,7 @@ def generate_phase1_report(
     experiment_data_dir: Path,
     output_dir: Path,
 ) -> None:
+    """生成 Phase 1 完整分析报告（控制台 + Markdown + 可视化图表） | Generate the full Phase 1 analysis report with console output, Markdown file, and visualization figures."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     figures_dir = output_dir / "figures"

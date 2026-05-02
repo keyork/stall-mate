@@ -20,14 +20,17 @@ class ConditionGroup:
 
     @property
     def choices(self) -> list[int]:
+        """提取所有有效选择 | Extract all non-None extracted choices from records."""
         return [r.extracted_choice for r in self.records if r.extracted_choice is not None]
 
     @property
     def label(self) -> str:
+        """生成分组标签字符串 | Generate a human-readable label for this condition group."""
         return f"G={self.experiment_group} N={self.num_stalls} T={self.temperature} tpl={self.template}"
 
 
 def load_experiment_data(data_dir: Path) -> dict[str, list[ExperimentRecord]]:
+    """从目录加载所有实验 JSONL 文件 | Load all experiment JSONL files from a directory."""
     data_dir = Path(data_dir)
     result: dict[str, list[ExperimentRecord]] = {}
     for path in sorted(data_dir.glob("phase*.jsonl")):
@@ -46,6 +49,7 @@ def load_experiment_data(data_dir: Path) -> dict[str, list[ExperimentRecord]]:
 
 
 def group_by_condition(records: list[ExperimentRecord]) -> list[ConditionGroup]:
+    """按实验条件（组别、坑位数、温度、模板）分组 | Group records by condition (group, stalls, temperature, template)."""
     buckets: dict[tuple, list[ExperimentRecord]] = {}
     for r in records:
         key = (r.experiment_group, r.num_stalls, r.temperature, r.prompt_template.value)
@@ -64,6 +68,7 @@ def group_by_condition(records: list[ExperimentRecord]) -> list[ConditionGroup]:
 
 
 def choice_distribution(choices: list[int], num_stalls: int) -> np.ndarray:
+    """计算每个坑位的选择次数数组 | Compute raw choice count array indexed by stall position."""
     counts = np.zeros(num_stalls, dtype=np.float64)
     for c in choices:
         if 1 <= c <= num_stalls:

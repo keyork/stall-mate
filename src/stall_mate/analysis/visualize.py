@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -26,7 +27,7 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 PALETTE = "Set2"
 
 
-def _save(fig: plt.Figure, output_path: Path) -> plt.Figure:
+def _save(fig: matplotlib.figure.Figure, output_path: Path) -> matplotlib.figure.Figure:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -35,7 +36,8 @@ def _save(fig: plt.Figure, output_path: Path) -> plt.Figure:
 
 def plot_choice_heatmap(
     groups: list[ConditionGroup], output_path: Path
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
+    """绘制选择频率分布热力图并保存 | Plot a heatmap of choice frequency distribution and save to file."""
     if not groups:
         return plt.figure()
     labels = [g.label for g in groups]
@@ -66,7 +68,8 @@ def plot_choice_heatmap(
 
 def plot_mcr_comparison(
     groups: list[ConditionGroup], output_path: Path
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
+    """按温度分组绘制 MCR 对比柱状图 | Plot grouped MCR comparison bar chart by temperature."""
     if not groups:
         return plt.figure()
     temps = sorted({g.temperature for g in groups})
@@ -92,7 +95,8 @@ def plot_mcr_comparison(
 
 def plot_choice_distribution(
     groups: list[ConditionGroup], output_path: Path
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
+    """绘制每个条件组的选择频率分布子图 | Plot per-condition choice frequency distribution subplots."""
     if not groups:
         return plt.figure()
     n_groups = len(groups)
@@ -121,7 +125,8 @@ def plot_choice_distribution(
 
 def plot_jsd_matrix(
     groups: list[ConditionGroup], output_path: Path
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
+    """绘制跨模板 Jensen-Shannon 散度对比图 | Plot cross-template Jensen-Shannon divergence comparison."""
     if not groups:
         return plt.figure()
     from collections import defaultdict
@@ -167,7 +172,8 @@ def plot_jsd_matrix(
 
 def plot_entropy_comparison(
     groups: list[ConditionGroup], output_path: Path
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
+    """绘制归一化熵对比柱状图 | Plot normalized entropy comparison bar chart across conditions."""
     if not groups:
         return plt.figure()
     fig, ax = plt.subplots(figsize=(max(len(groups) * 0.5, 8), 5))
@@ -188,7 +194,8 @@ def plot_entropy_comparison(
 
 def plot_temperature_comparison(
     groups: list[ConditionGroup], output_path: Path
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
+    """绘制 T=0.0 与 T=0.7 的 MCR 配对对比图 | Plot paired MCR comparison between T=0.0 and T=0.7."""
     if not groups:
         return plt.figure()
     t0 = [g for g in groups if g.temperature == 0.0]
