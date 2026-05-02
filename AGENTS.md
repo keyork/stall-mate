@@ -6,20 +6,20 @@ LLM decision-consistency stress test. Prompts frontier models with a trivial sce
 
 ## Status
 
-Phase 1 framework implemented. Core pipeline works: config → prompt → API call → structured output → JSONL record.
+Phase 1 & 2 framework implemented. Core pipeline + conditional experiments + analysis module all working.
 
 ## Commands
 
 ```bash
 uv sync                    # Install dependencies
-uv run pytest              # Run tests (74 tests)
+uv run pytest              # Run tests (89 tests)
 uv run python scripts/verify_10calls.py  # 10-call functional verification (requires API)
 ```
 
 ## Architecture
 
-- `src/stall_mate/` — core library (types, schema, config, prompt, client, runner, recorder)
-- `configs/` — YAML configs: `models.yaml` (API endpoint), `experiments/` (Phase 1), `prompt_templates/`
+- `src/stall_mate/` — core library (types, schema, config, prompt, client, runner, recorder, analysis)
+- `configs/` — YAML configs: `models.yaml` (API endpoint), `experiments/` (Phase 1, 2), `prompt_templates/`, `classification.yaml`
 - `tests/` — pytest unit tests (all mocked, no real API calls)
 - `data/` — JSONL output (gitignored except `.gitkeep`)
 - `scripts/` — verification scripts
@@ -41,7 +41,7 @@ Bilingual: Chinese + English. Keep both in user-facing text (README, docstrings,
 
 ## Constraints
 
-- No `litellm` dependency (single model, `instructor` sufficient for Phase 1)
-- No async runtime (sequential calls; can add later for scale)
-- No Phase 2 code yet (only Phase 1 experiment configs exist)
+- No `litellm` dependency (single model, `instructor` sufficient)
+- No async runtime (parallel via ThreadPoolExecutor; can add async later for scale)
+- Phase 2 conditional experiments implemented (26 condition scenarios)
 - API calls are slow (~15-30s each); set timeouts accordingly
