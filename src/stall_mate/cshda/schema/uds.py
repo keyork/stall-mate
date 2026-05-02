@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExtractionMeta(BaseModel):
@@ -69,3 +69,11 @@ class UniversalDecisionSpec(BaseModel):
     relations: list[Relation] = Field(default_factory=list)
     decision_context: list[ContextFactor] = Field(default_factory=list)
     decision_type_hint: str | None = None
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _coerce_metadata(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            import json
+            return json.loads(v)
+        return v
