@@ -37,9 +37,16 @@ def main() -> None:
 
     console.print(f"\n[bold]输入问题:[/]\n{TOILET_PROMPT}\n")
 
+    import os
+    local_model = os.path.join(os.path.dirname(__file__), "..", "models", "bge-m3")
+    local_model = os.path.abspath(local_model)
+    if not os.path.isdir(local_model):
+        local_model = "BAAI/bge-m3"
+
     engine = CSHDAEngine(
         model="glm-5.1",
         base_url="http://localhost:3000/v1",
+        embedding_model=local_model,
         extraction_rounds=3,
         device="cpu",
     )

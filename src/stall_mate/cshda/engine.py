@@ -36,6 +36,13 @@ class CSHDAEngine:
         extraction_rounds: int = 3,
         audit_path: Path | None = None,
     ):
+        # 优先使用本地模型 | Prefer local model if available
+        from pathlib import Path as _P
+        _local = _P(__file__).resolve().parent.parent.parent.parent / "models" / "bge-m3"
+        if _local.is_dir() and embedding_model == "BAAI/bge-m3":
+            embedding_model = str(_local)
+            _log.info("Using local embedding model: %s", embedding_model)
+
         self.extractor = UDSExtractor(
             model=model,
             base_url=base_url,
