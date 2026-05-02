@@ -29,6 +29,7 @@ from stall_mate.types import (
 
 @dataclass(frozen=True)
 class _Task:
+    """单次调用任务包 | Single call task bundle."""
     prompt: str
     system_message: str
     temperature: float
@@ -97,6 +98,7 @@ class ExperimentRunner:
         display: ExperimentDisplay | None = None,
         parallel_num: int = 4,
     ):
+        """初始化实验运行器 | Initialize the experiment runner."""
         self.client = client
         self.recorder = recorder
         self.model_config = model_config
@@ -150,6 +152,7 @@ class ExperimentRunner:
         num_stalls: int,
         metadata: dict[str, Any],
     ) -> ExperimentRecord:
+        """执行单次模型调用并记录结果 | Execute a single model call and record the result."""
         try:
             return self._run_single_inner(
                 prompt, system_message, temperature, num_stalls, metadata
@@ -216,6 +219,7 @@ class ExperimentRunner:
         templates: PromptTemplateConfig,
         max_retries: int = 3,
     ) -> RunStats:
+        """运行完整实验（含重试） | Run full experiment with retry logic."""
         combos = self._build_combos(experiment_config)
         random.shuffle(combos)
 

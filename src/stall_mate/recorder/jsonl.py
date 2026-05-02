@@ -18,6 +18,7 @@ class JSONLRecorder:
     """JSONL 格式数据记录器 / JSONL format data recorder."""
 
     def __init__(self, output_path: Path):
+        """初始化记录器并确保输出目录存在 | Initialize recorder and ensure output directory exists."""
         self.output_path = output_path
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -6,6 +6,8 @@
 Defines enums and data record models used in the experiment.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 

@@ -10,6 +10,7 @@ TOOLS → JSON_SCHEMA → PLAIN_TEXT.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -18,6 +19,8 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from stall_mate.schema import StallChoice
+
+_log = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -71,8 +74,8 @@ class LLMClient:
             )
             self._mode = "TOOLS"
             return self._mode
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("TOOLS mode probe failed: %s", exc)
 
         # Try JSON_SCHEMA mode
         try:
@@ -85,8 +88,8 @@ class LLMClient:
             )
             self._mode = "JSON_SCHEMA"
             return self._mode
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("JSON_SCHEMA mode probe failed: %s", exc)
 
         # All failed, fallback to plain text
         self._mode = "PLAIN_TEXT"

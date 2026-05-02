@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ------------------------------------------------------------------
@@ -42,8 +42,8 @@ class ExperimentConfig(BaseModel):
     temperatures: list[float]
     templates: list[str]
     repetitions: int = 30
-    conditions: dict = {}
-    occupied_stalls: list[int] = []
+    conditions: dict = Field(default_factory=dict)
+    occupied_stalls: list[int] = Field(default_factory=list)
 
 
 class PromptTemplateConfig(BaseModel):
@@ -69,7 +69,7 @@ class DirectionReversalPair(BaseModel):
 class ClassificationConfig(BaseModel):
     """响应分类配置 / Response classification configuration."""
 
-    refusal_keywords: list[str] = [
+    refusal_keywords: list[str] = Field(default_factory=lambda: [
         "无法",
         "不能",
         "拒绝",
@@ -78,22 +78,22 @@ class ClassificationConfig(BaseModel):
         "won't",
         "I can't",
         "inappropriate",
-    ]
-    chinese_patterns: list[str] = [
+    ])
+    chinese_patterns: list[str] = Field(default_factory=lambda: [
         r"第\s*(\d+)\s*个",
         r"(\d+)\s*号",
         r"选择.*?(\d+)",
-    ]
-    english_patterns: list[str] = [
+    ])
+    english_patterns: list[str] = Field(default_factory=lambda: [
         r"stall\s*(\d+)",
         r"number\s*(\d+)",
-    ]
+    ])
     trailing_digit_pattern: str = r"(\d+)\s*[。.!?]?\s*$"
     general_digit_pattern: str = r"\b(\d+)\b"
-    direction_reversal: list[DirectionReversalPair] = [
+    direction_reversal: list[DirectionReversalPair] = Field(default_factory=lambda: [
         DirectionReversalPair(source="从左到右", target="从右到左"),
         DirectionReversalPair(source="from left to right", target="from right to left"),
-    ]
+    ])
 
     def to_extraction_patterns(self) -> dict[str, list[str] | str]:
         """转换为 ExperimentRunner 所需的 extraction_patterns 格式。
