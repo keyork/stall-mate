@@ -15,6 +15,9 @@ dependencies = [
     "scipy>=1.10",
     "matplotlib>=3.7",
     "seaborn>=0.12",
+    "sentence-transformers>=5.4.1",
+    "nashpy>=0.0.43",
+    "networkx>=3.4.2",
 ]
 
 [dependency-groups]
