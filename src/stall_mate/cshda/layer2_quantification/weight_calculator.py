@@ -10,6 +10,9 @@ _log = logging.getLogger(__name__)
 
 class WeightCalculator:
     def variance_weights(self, score_matrix: np.ndarray) -> np.ndarray:
+        score_matrix = np.atleast_2d(score_matrix)
+        if score_matrix.shape[1] == 0:
+            return np.array([], dtype=np.float64)
         variances = np.var(score_matrix, axis=0, ddof=0)
         if np.all(variances < 1e-12):
             n = score_matrix.shape[1]
@@ -17,6 +20,9 @@ class WeightCalculator:
         return variances / variances.sum()
 
     def entropy_weights(self, score_matrix: np.ndarray) -> np.ndarray:
+        score_matrix = np.atleast_2d(score_matrix)
+        if score_matrix.shape[1] == 0:
+            return np.array([], dtype=np.float64)
         n_rows, n_cols = score_matrix.shape
         epsilon = 1e-10
         col_sums = score_matrix.sum(axis=0, keepdims=True)
