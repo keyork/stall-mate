@@ -42,8 +42,14 @@ class Formulator:
 
     def _formulate_t1(self, uds: UniversalDecisionSpec) -> T1Formulation:
         unavailable_ids: set[str] = set()
+        exclusion_kw = {"不可", "不能", "不选", "occup", "已被", "使用中", "正在使用",
+                         "exclude", "not available", "unavailable", "cannot"}
         for constraint in uds.constraints:
-            if "avail" in constraint.constraint_type.lower():
+            ctype = constraint.constraint_type.lower()
+            desc = constraint.description.lower()
+            if "avail" in ctype:
+                unavailable_ids.update(constraint.involves)
+            elif any(kw in desc for kw in exclusion_kw):
                 unavailable_ids.update(constraint.involves)
 
         available_entities = [

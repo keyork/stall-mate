@@ -14,6 +14,14 @@ class ExtractionMeta(BaseModel):
     extraction_rounds: int = 1
     extraction_stability: float = 1.0
 
+    @field_validator("extraction_timestamp", mode="before")
+    @classmethod
+    def _coerce_timestamp(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            from dateutil.parser import parse as parse_dt
+            return parse_dt(v)
+        return v
+
 
 class EntityProperty(BaseModel):
     key: str
